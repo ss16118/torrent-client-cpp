@@ -6,7 +6,7 @@
 */
 
 #include "BList.h"
-
+#include "BDictionary.h"
 #include <cassert>
 
 #include "BItemVisitor.h"
@@ -172,6 +172,24 @@ BList::const_iterator BList::cend() const {
 
 void BList::accept(BItemVisitor *visitor) {
 	visitor->visit(this);
+}
+
+/**
+ * If the list contains dictionaries, searches all the dictionaries for the
+ * given key, and return the corresponding value if found.
+ */
+std::shared_ptr<BItem> BList::getValue(const std::string &key) {
+    for (const auto& item : *this)
+    {
+        if (typeid(*item) == typeid(BDictionary))
+        {
+            std::shared_ptr<BDictionary> subDictionary = std::dynamic_pointer_cast<BDictionary>(item);
+            auto potentialValue = subDictionary->getValue(key);
+            if (potentialValue)
+                return potentialValue;
+        }
+    }
+    return std::shared_ptr<BItem>();
 }
 
 } // namespace bencoding

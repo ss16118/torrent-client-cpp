@@ -12,6 +12,7 @@
 
 #include "BItemVisitor.h"
 #include "BString.h"
+#include "BList.h"
 
 namespace bencoding {
 
@@ -138,18 +139,24 @@ std::shared_ptr<BItem> BDictionary::getValue(const std::string& key)
             return item.second;
         }
 
-        // Checks if the value the key maps to is a BDictionary
+        // Checks if the value which the key maps to is a BDictionary
         if (typeid(*item.second) == typeid(BDictionary))
         {
             std::shared_ptr<BDictionary> subDictionary = std::dynamic_pointer_cast<BDictionary>(item.second);
             auto potentialValue = subDictionary->getValue(key);
             if (potentialValue)
-            {
                 return potentialValue;
-            }
+        }
+        // Checks if the value which the key maps to is a BList
+        else if (typeid(*item.second) == typeid(BList))
+        {
+            std::shared_ptr<BList> subList = std::dynamic_pointer_cast<BList>(item.second);
+            auto potentialValue = subList->getValue(key);
+            if (potentialValue)
+                return potentialValue;
         }
     }
-    return nullptr;
+    return std::shared_ptr<BItem>();
 }
 
 } // namespace bencoding

@@ -8,7 +8,15 @@
 #include <bencode/BDictionary.h>
 
 using byte = unsigned char;
-
+/**
+ * A class that parses a given Torrent file by using the bencoding library in following repo:
+ * https://github.com/s3rvac/cpp-bencoding.
+ * The result returned by bencoding decoder is a pointer to a custom BItem object, which can
+ * be a dictionary, a list, an integer, or a string. To retrieve the value of a specific key
+ * in the top level dictionary, an instance function named getValue() was added to the
+ * BDictionary class. It recursively checks the keys of all dictionaries from the top level
+ * and returns the value of key, if it exists.
+ */
 class TorrentFileParser
 {
 private:

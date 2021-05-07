@@ -85,7 +85,7 @@ public:
 	/// @{
 	virtual void accept(BItemVisitor *visitor) override;
 	/// @}
-
+    std::shared_ptr<BItem> getValue(const std::string& key);
 private:
 	BList();
 	explicit BList(std::initializer_list<value_type> items);

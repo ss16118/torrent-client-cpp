@@ -13,6 +13,7 @@
 #include <crypto/sha1.h>
 
 #include "TorrentFileParser.h"
+#include "utils.h"
 
 /**
  * Constructor of the class TorrentFileParser. Takes in
@@ -28,7 +29,7 @@ TorrentFileParser::TorrentFileParser(std::string filePath)
     std::shared_ptr<bencoding::BDictionary> rootDict =
             std::dynamic_pointer_cast<bencoding::BDictionary>(decodedTorrentFile);
     root = rootDict;
-    std::string prettyRepr = bencoding::getPrettyRepr(decodedTorrentFile);
+    // std::string prettyRepr = bencoding::getPrettyRepr(decodedTorrentFile);
     // std::cout << prettyRepr << std::endl;
 }
 
@@ -44,7 +45,7 @@ std::shared_ptr<bencoding::BItem> TorrentFileParser::get(std::string key)
     {
         return value;
     }
-    return nullptr;
+    return std::shared_ptr<bencoding::BItem>();
 }
 
 
@@ -53,18 +54,14 @@ std::shared_ptr<bencoding::BItem> TorrentFileParser::get(std::string key)
  * The description of what the info hash is can be found in the following post:
  * https://stackoverflow.com/questions/28348678/what-exactly-is-the-info-hash-in-a-torrent-file.
  * The sha1 function comes from http://www.zedwood.com/article/cpp-sha1-function.
- * @return
  */
 std::string TorrentFileParser::getInfoHash()
 {
     std::shared_ptr<bencoding::BItem> infoDictionary = get("info");
     std::string infoString = bencoding::encode(infoDictionary);
-    return sha1(infoString);
+    std::string sha1Hash = sha1(infoString);
+    return sha1Hash;
 }
-
-/****************************************************************
- ********************** Private Functions ***********************
- ****************************************************************/
 
 /**
  * Splits the string representation of the value of 'pieces' into
