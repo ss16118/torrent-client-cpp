@@ -50,3 +50,24 @@ std::string hexDecode(const std::string& value)
     }
     return decodedHexString;
 }
+
+/**
+ * Hex-encode a string.
+ * @param input: the string to be encoded.
+ * @return hex-encoded string.
+ */
+std::string hexEncode(const std::string& input)
+{
+    static const char hexDigits[] = "0123456789ABCDEF";
+
+    std::string output;
+    output.reserve(input.length() * 2);
+    for (unsigned char c : input)
+    {
+        output.push_back('\\');
+        output.push_back('x');
+        output.push_back(hexDigits[c >> 4]);
+        output.push_back(hexDigits[c & 15]);
+    }
+    return output;
+}

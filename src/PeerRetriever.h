@@ -31,7 +31,7 @@ private:
     long fileSize;
     std::vector<Peer> decodeResponse(std::string response);
 public:
-    explicit PeerRetriever(std::string announceUrL, std::string infoHash, int port, long fileSize);
+    explicit PeerRetriever(std::string peerId, std::string announceUrL, std::string infoHash, int port, long fileSize);
     std::vector<Peer> retrievePeers();
 };
 

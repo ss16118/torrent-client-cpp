@@ -30,10 +30,3 @@ public:
 
 
 #endif //BITTORRENTCLIENT_TORRENTFILEPARSER_H
-
-/**
-
-created by13:mktorrent 1.013:creation datei1570750285e4:infod6:lengthi20e4:name4:priv12:piece lengthi262144e6:pieces20:...B644.o'.......z"+7:privatei1eee
-
-
-*/

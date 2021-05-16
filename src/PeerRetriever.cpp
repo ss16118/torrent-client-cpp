@@ -13,6 +13,8 @@
 #include "utils.h"
 #include "PeerRetriever.h"
 
+#define TRACKER_TIMEOUT 10000
+
 /**
  * Constructor of the class PeerRetriever. Takes in the URL as specified by the
  * value of announce in the Torrent file, the info hash of the file, as well as
@@ -21,25 +23,13 @@
  * @param infoHash: the info hash of the Torrent file.
  * @param port: the TCP port this client listens on.
  */
-PeerRetriever::PeerRetriever(std::string announceUrl, std::string infoHash, int port, long fileSize)
+PeerRetriever::PeerRetriever(std::string peerId, std::string announceUrl, std::string infoHash, int port, long fileSize)
 {
+    this->peerId = peerId;
     this->announceUrl = announceUrl;
     this->infoHash = infoHash;
     this->port = port;
     this->fileSize = fileSize;
-
-    // Generate a random 20-byte peer Id for the client as per the convention described
-    // on the following web page.
-    // https://wiki.theory.org/BitTorrentSpecification#peer_id
-    peerId = "-UT2021-";
-    // Generate 12 random numbers
-    std::random_device rd;  //Will be used to obtain a seed for the random number engine
-    std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-    std::uniform_int_distribution<> distrib(1, 9);
-    for (int i = 0; i < 12; i++)
-        peerId += std::to_string(distrib(gen));
-
-    // std::cout << peerId << std::endl;
 }
 
 /**
@@ -57,9 +47,6 @@ PeerRetriever::PeerRetriever(std::string announceUrl, std::string infoHash, int 
  */
 std::vector<Peer> PeerRetriever::retrievePeers()
 {
-    // std::cout << "Announce: " << std::string(announceUrl) << std::endl;
-    // std::cout << "Peer ID: " << std::string(peerId) << std::endl;
-    // std::cout << "File size: " <<  std::to_string(fileSize) << std::endl;
     std::cout << "Retrieving peers from " << announceUrl << " with the following parameters..." << std::endl;
     // Note that info hash will be URL-encoded by the cpr library
     std::cout << "info_hash: " << infoHash << std::endl;
@@ -71,28 +58,30 @@ std::vector<Peer> PeerRetriever::retrievePeers()
     std::cout << "compact: " << std::to_string(1) << std::endl;
 
     cpr::Response res = cpr::Get(cpr::Url{announceUrl}, cpr::Parameters {
-        { "info_hash", std::string(hexDecode(infoHash)) },
-        { "peer_id", std::string(peerId) },
-        { "port", std::to_string(port) },
-        { "uploaded", std::to_string(0) },
-        { "downloaded", std::to_string(0) },
-        { "left", std::to_string(fileSize) },
-        { "compact", std::to_string(1) }
-    });
+            { "info_hash", std::string(hexDecode(infoHash)) },
+            { "peer_id", std::string(peerId) },
+            { "port", std::to_string(port) },
+            { "uploaded", std::to_string(0) },
+            { "downloaded", std::to_string(0) },
+            { "left", std::to_string(fileSize) },
+            { "compact", std::to_string(1) }
+        }, cpr::Timeout{ TRACKER_TIMEOUT }
+    );
 
     // If response successfully retrieved
     if (res.status_code == 200)
     {
-        std::cout << "Retrieving response from tracker: SUCCESS" << std::endl;
-        // std::shared_ptr<bencoding::BItem> decodedResponse = bencoding::decode(res.text);
-        // std::string formattedResponse = bencoding::getPrettyRepr(decodedResponse);
-        // std::cout << formattedResponse << std::endl;
+        std::cout << "Retrieve response from tracker: SUCCESS" << std::endl;
+//        std::shared_ptr<bencoding::BItem> decodedResponse = bencoding::decode(res.text);
+//        std::string formattedResponse = bencoding::getPrettyRepr(decodedResponse);
+//        std::cout << formattedResponse << std::endl;
         std::vector<Peer> peers = decodeResponse(res.text);
         return peers;
     }
     else
     {
-        std::cout << "Retrieving response from tracker: FAILED [ " << res.text << " ]" << std::endl;
+        std::cout << "Retrieving response from tracker: FAILED [ " << std::to_string(res.status_code) << ": "
+        << res.text << " ]" << std::endl;
     }
     return std::vector<Peer>();
 }
@@ -141,6 +130,7 @@ std::vector<Peer> PeerRetriever::decodeResponse(std::string response) {
             peerIp << std::to_string((uint8_t) peersString[offset + 1]) << ".";
             peerIp << std::to_string((uint8_t) peersString[offset + 2]) << ".";
             peerIp << std::to_string((uint8_t) peersString[offset + 3]);
+            // FIXME Use bitwise operation to convert the bytes to an integer
             std::string portBinStr =
                     std::bitset<8>(peersString[offset + 4]).to_string() +
                     std::bitset<8>(peersString[offset + 5]).to_string();
@@ -149,7 +139,6 @@ std::vector<Peer> PeerRetriever::decodeResponse(std::string response) {
             // std::cout << "Port: " << std::to_string(peerPort) << std::endl;
             peers.push_back(Peer { peerIp.str(), peerPort });
         }
-        return peers;
     }
     // Handles the second case where peer information is stored in a list
     else if (typeid(*peersValue) == typeid(bencoding::BList))
@@ -180,7 +169,7 @@ std::vector<Peer> PeerRetriever::decodeResponse(std::string response) {
         throw std::runtime_error(
                 "Response returned by the tracker is not in the correct format. ['peers' has the wrong type]");
     }
-    std::cout << "Decoding tracker response: SUCCESS" << std::endl;
+    std::cout << "Decode tracker response: SUCCESS" << std::endl;
     std::cout << "Number of peers discovered: " << std::to_string(peers.size()) << std::endl;
     return peers;
 }

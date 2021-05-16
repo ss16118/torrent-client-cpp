@@ -7,13 +7,10 @@
 #include <stdexcept>
 #include <bencode/BItem.h>
 #include <bencode/Decoder.h>
-#include <bencode/BString.h>
-#include <bencode/PrettyPrinter.h>
 #include <bencode/bencoding.h>
 #include <crypto/sha1.h>
 
 #include "TorrentFileParser.h"
-#include "utils.h"
 
 /**
  * Constructor of the class TorrentFileParser. Takes in
