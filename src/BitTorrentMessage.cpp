@@ -30,3 +30,19 @@ std::string BitTorrentMessage::toString() {
     buffer << payload;
     return buffer.str();
 }
+
+/**
+ * A getter function for the attribute Id.
+ * @return the Id of the BitTorrentMessage instance.
+ */
+uint8_t BitTorrentMessage::getMessageId() const {
+    return id;
+}
+
+/**
+ * A getter function for the attribute payload.
+ * @return the payload of the BitTorrentMessage instance.
+ */
+std::string BitTorrentMessage::getPayload() const {
+    return payload;
+}

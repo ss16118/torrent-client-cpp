@@ -3,6 +3,7 @@
 //
 #include <iomanip>
 #include <iostream>
+#include <cmath>
 #include <string>
 
 /**
@@ -52,7 +53,8 @@ std::string hexDecode(const std::string& value)
 }
 
 /**
- * Hex-encode a string.
+ * Hex-encode a string. Implementation comes from the following post:
+ * https://stackoverflow.com/questions/3381614/c-convert-string-to-hexadecimal-and-vice-versa
  * @param input: the string to be encoded.
  * @return hex-encoded string.
  */
@@ -70,4 +72,26 @@ std::string hexEncode(const std::string& input)
         output.push_back(hexDigits[c & 15]);
     }
     return output;
+}
+
+
+/**
+ * Checks if the bit at the given index of a BitField string is set to
+ * 1 or not.
+ */
+bool hasPiece(const std::string& bitField, int index)
+{
+    int byteIndex = floor(index / 8);
+    int offset = index % 8;
+    return (bitField[byteIndex] >> (7 - offset) & 1) != 0;
+}
+
+/**
+ * Sets the given index of the Bitfield to 1.
+ */
+void setPiece(std::string& bitField, int index)
+{
+    int byteIndex = floor(index / 8);
+    int offset = index % 8;
+    bitField[byteIndex] |= (1 << (7 - offset));
 }

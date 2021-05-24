@@ -10,4 +10,9 @@ std::string urlEncode(const std::string& value);
 std::string hexDecode(const std::string& value);
 
 std::string hexEncode(const std::string& input);
+
+bool hasPiece(const std::string& bitField, int index);
+
+void setPiece(std::string& bitField, int index);
+
 #endif //BITTORRENTCLIENT_UTILS_H

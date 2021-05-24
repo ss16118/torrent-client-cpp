@@ -7,6 +7,7 @@
 
 #include "PeerRetriever.h"
 #include "BitTorrentMessage.h"
+#include "PieceManager.h"
 
 using byte = unsigned char;
 
@@ -15,18 +16,24 @@ class PeerConnection
 private:
     int sock{};
     bool chocked = true;
-    std::string bitField;
     const struct Peer peer;
-    const std::string peerId;
+    const std::string clientId;
     const std::string infoHash;
+    std::string peerBitField;
+    std::string peerId;
+    PieceManager* pieceManager;
+
     std::string createHandshakeMessage();
     void performHandshake();
     void receiveBitField();
     void sendInterested();
     void receiveUnchoke();
-    void closeConnection();
+    BitTorrentMessage receiveMessage(int bufferSize = NULL) const;
+
 public:
-    explicit PeerConnection(const struct Peer peer, const std::string peerId, const std::string infoHash);
+    const std::string &getPeerId() const;
+
+    explicit PeerConnection(struct Peer peer, std::string clientId, std::string infoHash, PieceManager* pieceManager);
     ~PeerConnection();
     void establishNewConnection();
 };

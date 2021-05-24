@@ -31,6 +31,6 @@ else()
     # Error; with REQUIRED, pkg_search_module() will throw an error by it's own
 endif()
 
-add_executable(BitTorrentClient src/main.cpp src/TorrentFileParser.cpp src/TorrentFileParser.h src/PeerRetriever.h src/PeerRetriever.cpp src/utils.cpp src/utils.h src/PeerConnection.cpp src/PeerConnection.h src/connect.cpp src/connect.h src/TorrentClient.h src/TorrentClient.cpp src/BitTorrentMessage.h src/BitTorrentMessage.cpp)
+add_executable(BitTorrentClient src/main.cpp src/TorrentFileParser.cpp src/TorrentFileParser.h src/PeerRetriever.h src/PeerRetriever.cpp src/utils.cpp src/utils.h src/PeerConnection.cpp src/PeerConnection.h src/connect.cpp src/connect.h src/TorrentClient.h src/TorrentClient.cpp src/BitTorrentMessage.h src/BitTorrentMessage.cpp src/PieceManager.h src/PieceManager.cpp src/Piece.h src/Piece.cpp src/Block.h)
 
 target_link_libraries(BitTorrentClient PRIVATE bencoding crypto cpr ${CURL_LIBRARIES} ${OPENSSL_LIBRARIES})

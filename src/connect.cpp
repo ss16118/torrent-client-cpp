@@ -9,8 +9,33 @@
 #include <iostream>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include "connect.h"
 #include "utils.h"
+
+#define CONNECT_TIMEOUT 5
+#define READ_TIMEOUT 3
+
+/**
+ * Sets the given socket to either blocking or non-blocking mode.
+ * Implementation found on:
+ * https://stackoverflow.com/questions/1543466/how-do-i-change-a-tcp-socket-to-be-non-blocking
+ * @param sock: the socket to block or unblock.
+ * @param blocking: if true, the given socket will be set to blocking mode.
+ * If false, the socket will be set to non-blocking mode.
+ * @return true on success, false if an error occurs.
+ */
+bool setSocketBlocking(int sock, bool blocking)
+{
+    if (sock < 0)
+        return false;
+
+    int flags = fcntl(sock, F_GETFL, 0);
+    if (flags == -1) return false;
+    flags = blocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
+    return (fcntl(sock, F_SETFL, flags) == 0);
+}
+
 
 /**
  * Starts a TCP connection with the given IP address and port number. Returns the
@@ -36,10 +61,39 @@ int createConnection(const std::string& ip, const int port)
     if (inet_pton(AF_INET, tempIp, &address.sin_addr) <= 0)
         throw std::runtime_error("Invalid IP address: " + ip);
 
-    if (connect(sock, (struct sockaddr *) &address, sizeof(address)) < 0 )
-        throw std::runtime_error("Failed to connect to " + ip);
+//    if (connect(sock, (struct sockaddr *) &address, sizeof(address)) < 0)
+//        throw std::runtime_error("Failed to connect to " + ip);
 
-    return sock;
+    // Sets socket to non-block mode
+    if (!setSocketBlocking(sock, false))
+        throw std::runtime_error("An error occurred when setting socket " + std::to_string(sock) + "to NONBLOCK");
+
+    connect(sock, (struct sockaddr *) &address, sizeof(address));
+
+    fd_set fdset;
+    struct timeval tv;
+    FD_ZERO(&fdset);
+    FD_SET(sock, &fdset);
+    tv.tv_sec = CONNECT_TIMEOUT;
+    tv.tv_usec = 0;
+
+    if (select(sock + 1, NULL, &fdset, NULL, &tv) == 1)
+    {
+        int so_error;
+        socklen_t len = sizeof so_error;
+
+        getsockopt(sock, SOL_SOCKET, SO_ERROR, &so_error, &len);
+
+        if (so_error == 0)
+        {
+            // Sets socket to blocking mode
+            if (!setSocketBlocking(sock, true))
+                throw std::runtime_error("An error occurred when setting socket " + std::to_string(sock) + "to BLOCK");
+            return sock;
+        }
+    }
+    close(sock);
+    throw std::runtime_error("Connect to " + ip + ": FAILED [Connection timeout]");
 }
 
 
@@ -48,7 +102,7 @@ int createConnection(const std::string& ip, const int port)
  * @param sock: socket number.
  * @param data: data to be written (sent) to the socket.
  */
-void sendData(const int sock, const std::string data)
+void sendData(const int sock, const std::string& data)
 {
     int n = data.length();
     char buffer[n];
@@ -93,6 +147,13 @@ std::string receiveData(const int sock, int bufferSize)
     // Keep reading from the buffer all required bytes are received
     int bytesRead = 0;
     int bytesToRead = bufferSize - bytesRead;
+
+    // Sets timeout on the socket for read operation
+    struct timeval tv;
+    tv.tv_sec = READ_TIMEOUT;
+    tv.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+
     do
     {
         bytesRead = read(sock, buffer, sizeof(buffer));
@@ -103,5 +164,6 @@ std::string receiveData(const int sock, int bufferSize)
             reply.push_back(buffer[i]);
     }
     while (bytesToRead > 0);
+
     return reply;
 }

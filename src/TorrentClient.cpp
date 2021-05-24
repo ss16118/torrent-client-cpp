@@ -3,7 +3,9 @@
 //
 
 #include <random>
+#include <iostream>
 #include <bencode/bencoding.h>
+#include "PieceManager.h"
 #include "TorrentClient.h"
 #include "TorrentFileParser.h"
 #include "PeerRetriever.h"
@@ -34,15 +36,22 @@ void TorrentClient::downloadFile(const std::string& torrentFilePath) {
     long fileSize = std::dynamic_pointer_cast<bencoding::BInteger>(torrentFileParser.get("length"))->value();
     const std::string infoHash = torrentFileParser.getInfoHash();
 
+    PieceManager pieceManager(torrentFileParser);
+
     // Retrieve peers from the tracker
     PeerRetriever peerRetriever(peerId, announceUrl, infoHash, 8080, fileSize);
     auto peers = peerRetriever.retrievePeers();
-
     // Connect to peers
     if (!peers.empty())
     {
-        PeerConnection peerConnection(peers[0], peerId, infoHash);
-        peerConnection.establishNewConnection();
+        PeerConnection connection(peers[0], peerId, infoHash, &pieceManager);
+        connection.establishNewConnection();
+        Block* block = pieceManager.nextRequest(connection.getPeerId());
+
+        std::cout << "[DEBUG] Block piece: " << std::to_string(block->piece) << std::endl;
+        std::cout << "[DEBUG] Block offset: " << std::to_string(block->offset) << std::endl;
+        std::cout << "[DEBUG] Block length: " << std::to_string(block->length) << std::endl;
+        std::cout << "[DEBUG] Block status: " << std::to_string(block->status) << std::endl;
     }
 }
 

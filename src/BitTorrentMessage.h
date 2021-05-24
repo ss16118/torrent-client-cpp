@@ -22,13 +22,15 @@ enum MessageId
 
 class BitTorrentMessage
 {
-protected:
+private:
     const uint32_t messageLength;
     const uint8_t id;
     const std::string payload;
 public:
     explicit BitTorrentMessage(uint8_t id, const std::string& payload = "");
     std::string toString();
+    uint8_t getMessageId() const;
+    std::string getPayload() const;
 };
 
 #endif //BITTORRENTCLIENT_BITTORRENTMESSAGE_H

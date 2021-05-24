@@ -5,6 +5,7 @@
 #ifndef BITTORRENTCLIENT_TORRENTFILEPARSER_H
 #define BITTORRENTCLIENT_TORRENTFILEPARSER_H
 #include <string>
+#include <vector>
 #include <bencode/BDictionary.h>
 
 using byte = unsigned char;
@@ -21,11 +22,11 @@ class TorrentFileParser
 {
 private:
     std::shared_ptr<bencoding::BDictionary> root;
-    void splitPieceHashes(int numHashes, std::string piecesString, byte** buffer);
 public:
     explicit TorrentFileParser(std::string filePath);
-    std::shared_ptr<bencoding::BItem> get(std::string key);
+    std::shared_ptr<bencoding::BItem> get(std::string key) const;
     std::string getInfoHash();
+    std::vector<std::string> splitPieceHashes() const;
 };
 
 

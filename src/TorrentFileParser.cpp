@@ -5,12 +5,14 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <cassert>
 #include <bencode/BItem.h>
 #include <bencode/Decoder.h>
 #include <bencode/bencoding.h>
 #include <crypto/sha1.h>
 
 #include "TorrentFileParser.h"
+#define HASH_LEN 20
 
 /**
  * Constructor of the class TorrentFileParser. Takes in
@@ -26,8 +28,8 @@ TorrentFileParser::TorrentFileParser(std::string filePath)
     std::shared_ptr<bencoding::BDictionary> rootDict =
             std::dynamic_pointer_cast<bencoding::BDictionary>(decodedTorrentFile);
     root = rootDict;
-    // std::string prettyRepr = bencoding::getPrettyRepr(decodedTorrentFile);
-    // std::cout << prettyRepr << std::endl;
+    std::string prettyRepr = bencoding::getPrettyRepr(decodedTorrentFile);
+    std::cout << prettyRepr << std::endl;
 }
 
 /**
@@ -35,14 +37,9 @@ TorrentFileParser::TorrentFileParser(std::string filePath)
  * Traverses all the key-value pairs in the parsed dictionary, including
  * sub-dictionaries (i.e. dictionaries which are values).
  */
-std::shared_ptr<bencoding::BItem> TorrentFileParser::get(std::string key)
-{
+std::shared_ptr<bencoding::BItem> TorrentFileParser::get(std::string key) const {
     std::shared_ptr<bencoding::BItem> value = root->getValue(key);
-    if (value)
-    {
-        return value;
-    }
-    return std::shared_ptr<bencoding::BItem>();
+    return value;
 }
 
 
@@ -62,16 +59,20 @@ std::string TorrentFileParser::getInfoHash()
 
 /**
  * Splits the string representation of the value of 'pieces' into
- * a two dimensional byte array.
- * @param numHashes: total number of hashes.
- * @param piecesString: the string representation of pieces.
- * @param buffer a byte array whose memory has already been allocated.
+ * a vector of strings.
  */
-void TorrentFileParser::splitPieceHashes(int numHashes, std::string piecesString, byte** buffer)
-{
-    const int hashLength = 20;
-    for (int i = 0; i < numHashes; i++)
-    {
-        memcpy(buffer[i], &piecesString[i * hashLength], hashLength);
-    }
+std::vector<std::string> TorrentFileParser::splitPieceHashes() const {
+    std::shared_ptr<bencoding::BItem> piecesValue = get("pieces");
+    if (!piecesValue)
+        throw std::runtime_error("Torrent file is malformed. [File does not contain key 'pieces']");
+    std::string pieces = std::dynamic_pointer_cast<bencoding::BString>(piecesValue)->value();
+
+    std::vector<std::string> pieceHashes;
+
+    assert(pieces.size() % HASH_LEN == 0);
+    int piecesCount = (int) pieces.size() / HASH_LEN;
+    pieceHashes.reserve(piecesCount);
+    for (int i = 0; i < piecesCount; i++)
+        pieceHashes.push_back(pieces.substr(i * HASH_LEN, HASH_LEN));
+    return pieceHashes;
 }
