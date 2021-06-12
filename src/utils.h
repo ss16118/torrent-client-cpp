@@ -15,4 +15,6 @@ bool hasPiece(const std::string& bitField, int index);
 
 void setPiece(std::string& bitField, int index);
 
+int bytesToInt(std::string bytes);
+
 #endif //BITTORRENTCLIENT_UTILS_H

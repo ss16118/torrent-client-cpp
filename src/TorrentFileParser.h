@@ -24,6 +24,8 @@ private:
     std::shared_ptr<bencoding::BDictionary> root;
 public:
     explicit TorrentFileParser(std::string filePath);
+    long getFileSize() const;
+    long getPieceLength() const;
     std::shared_ptr<bencoding::BItem> get(std::string key) const;
     std::string getInfoHash();
     std::vector<std::string> splitPieceHashes() const;

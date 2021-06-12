@@ -6,14 +6,19 @@
 #define BITTORRENTCLIENT_TORRENTCLIENT_H
 
 #include <string>
+#include "PeerRetriever.h"
+#include "PeerConnection.h"
 
 class TorrentClient
 {
 private:
     std::string peerId;
+    std::vector<Peer*> peers;
+    std::vector<PeerConnection> peerConnections;
 public:
     explicit TorrentClient();
-    void downloadFile(const std::string& torrentFilePath);
+    ~TorrentClient();
+    void downloadFile(const std::string& torrentFilePath, const std::string& downloadPath);
 };
 
 #endif //BITTORRENTCLIENT_TORRENTCLIENT_H

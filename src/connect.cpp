@@ -125,6 +125,8 @@ void sendData(const int sock, const std::string& data)
  */
 std::string receiveData(const int sock, int bufferSize)
 {
+    std::string reply;
+
     // If buffer size is not specified, read the first 4 bytes of the message
     // to obtain the total length of the response.
     if (!bufferSize)
@@ -132,19 +134,19 @@ std::string receiveData(const int sock, int bufferSize)
         const int lengthIndicatorSize = 4;
         char buffer[lengthIndicatorSize];
         if (read(sock, buffer, sizeof(buffer)) < 0)
-            throw std::runtime_error("Failed to read total length of the message from socket " + std::to_string(sock));
-        uint32_t messageLength = 0;
-        for (int i = 0; i < lengthIndicatorSize; i++)
-            messageLength |= buffer[i] << ((lengthIndicatorSize - 1 - i) * 8);
+            return reply;
+        std::string messageLengthStr;
+        for (char i : buffer)
+            messageLengthStr += i;
+        uint32_t messageLength = bytesToInt(messageLengthStr);
         // std::cout << "[DEBUG] Message length: " << std::to_string(messageLength) << std::endl;
         bufferSize = (int) messageLength;
     }
 
     char buffer[bufferSize];
     memset(buffer, NULL, sizeof(buffer));
-    std::string reply;
     // Receives reply from the host
-    // Keep reading from the buffer all required bytes are received
+    // Keeps reading from the buffer until all expected bytes are received
     int bytesRead = 0;
     int bytesToRead = bufferSize - bytesRead;
 

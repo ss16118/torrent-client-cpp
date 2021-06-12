@@ -10,7 +10,9 @@
 #include <sstream>
 #include <cassert>
 #include <crypto/sha1.h>
+
 #include "Piece.h"
+#include "utils.h"
 
 Piece::Piece(int index, std::vector<Block*> blocks, std::string hashValue):
         index(index), hashValue(std::move(hashValue))
@@ -69,11 +71,12 @@ void Piece::blockReceived(int offset, std::string data)
         {
             block->status = retrieved;
             block->data = data;
+            return;
         }
     }
     throw std::runtime_error(
     "Trying to complete a non-existing block " + std::to_string(offset) +
-        "in piece " + std::to_string(index)
+        " in piece " + std::to_string(index)
     );
 }
 
@@ -98,7 +101,7 @@ bool Piece::isComplete()
  */
 bool Piece::isHashMatching()
 {
-    std::string pieceHash = sha1(getData());
+    std::string pieceHash = hexDecode(sha1(getData()));
     return pieceHash == hashValue;
 }
 

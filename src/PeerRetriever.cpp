@@ -13,7 +13,7 @@
 #include "utils.h"
 #include "PeerRetriever.h"
 
-#define TRACKER_TIMEOUT 10000
+#define TRACKER_TIMEOUT 15000
 
 /**
  * Constructor of the class PeerRetriever. Takes in the URL as specified by the
@@ -45,7 +45,7 @@ PeerRetriever::PeerRetriever(std::string peerId, std::string announceUrl, std::s
  * - compact: whether or not the client accepts a compacted list of peers or not.
  * @return a vector that contains the information of all peers.
  */
-std::vector<Peer> PeerRetriever::retrievePeers()
+std::vector<Peer*> PeerRetriever::retrievePeers()
 {
     std::cout << "Retrieving peers from " << announceUrl << " with the following parameters..." << std::endl;
     // Note that info hash will be URL-encoded by the cpr library
@@ -75,7 +75,7 @@ std::vector<Peer> PeerRetriever::retrievePeers()
 //        std::shared_ptr<bencoding::BItem> decodedResponse = bencoding::decode(res.text);
 //        std::string formattedResponse = bencoding::getPrettyRepr(decodedResponse);
 //        std::cout << formattedResponse << std::endl;
-        std::vector<Peer> peers = decodeResponse(res.text);
+        std::vector<Peer*> peers = decodeResponse(res.text);
         return peers;
     }
     else
@@ -83,18 +83,18 @@ std::vector<Peer> PeerRetriever::retrievePeers()
         std::cout << "Retrieving response from tracker: FAILED [ " << std::to_string(res.status_code) << ": "
         << res.text << " ]" << std::endl;
     }
-    return std::vector<Peer>();
+    return std::vector<Peer*>();
 }
 
 /**
  * Decodes the response string sent by the tracker. If the string can successfully decoded,
- * returns a list of Peer structs. Note that this functions handles two distinct representations,
- * one of them has the peers denoted as a long binary blob, the other represents peers in a list
+ * returns a list of pointers to Peer structs. Note that this functions handles two distinct representations,
+ * one of them has the peers denoted as a long binary blob (compact), the other represents peers in a list
  * with all the information already in place. The former can be seen in the response of
  * the kali-linux tracker, whereas the latter can be found in the tracker response of the
  * other two files.
  */
-std::vector<Peer> PeerRetriever::decodeResponse(std::string response) {
+std::vector<Peer*> PeerRetriever::decodeResponse(std::string response) {
     std::cout << "Decoding tracker response..." << std::endl;
     std::shared_ptr<bencoding::BItem> decodedResponse = bencoding::decode(response);
 
@@ -104,9 +104,9 @@ std::vector<Peer> PeerRetriever::decodeResponse(std::string response) {
     if (!peersValue)
         throw std::runtime_error("Response returned by the tracker is not in the correct format. ['peers' not found]");
 
-    std::vector<Peer> peers;
+    std::vector<Peer*> peers;
 
-    // Handles the first case where peer information is sent in a binary blob
+    // Handles the first case where peer information is sent in a binary blob (compact)
     if (typeid(*peersValue) == typeid(bencoding::BString))
     {
         // Unmarshalls the peer information:
@@ -130,14 +130,11 @@ std::vector<Peer> PeerRetriever::decodeResponse(std::string response) {
             peerIp << std::to_string((uint8_t) peersString[offset + 1]) << ".";
             peerIp << std::to_string((uint8_t) peersString[offset + 2]) << ".";
             peerIp << std::to_string((uint8_t) peersString[offset + 3]);
-            // FIXME Use bitwise operation to convert the bytes to an integer
-            std::string portBinStr =
-                    std::bitset<8>(peersString[offset + 4]).to_string() +
-                    std::bitset<8>(peersString[offset + 5]).to_string();
-            int peerPort = stoi(portBinStr, 0, 2);
+            int peerPort = bytesToInt(peersString.substr(offset + 4, 2));
             // std::cout << "IP: " << peerIp.str() << std::endl;
             // std::cout << "Port: " << std::to_string(peerPort) << std::endl;
-            peers.push_back(Peer { peerIp.str(), peerPort });
+            Peer* newPeer = new Peer { peerIp.str(), peerPort };
+            peers.push_back(newPeer);
         }
     }
     // Handles the second case where peer information is stored in a list
@@ -161,7 +158,8 @@ std::vector<Peer> PeerRetriever::decodeResponse(std::string response) {
             if (!tempPeerPort)
                 throw std::runtime_error("Received malformed 'peers' from tracker. [Item does not contain key 'port']");
             int peerPort = (int) std::dynamic_pointer_cast<bencoding::BInteger>(tempPeerPort)->value();
-            peers.push_back(Peer { peerIp, peerPort });
+            Peer* newPeer = new Peer { peerIp, peerPort };
+            peers.push_back(newPeer);
         }
     }
     else

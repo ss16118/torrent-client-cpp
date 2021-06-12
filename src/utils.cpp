@@ -5,6 +5,7 @@
 #include <iostream>
 #include <cmath>
 #include <string>
+#include <bitset>
 
 /**
  * URL-encodes the given string.
@@ -94,4 +95,24 @@ void setPiece(std::string& bitField, int index)
     int byteIndex = floor(index / 8);
     int offset = index % 8;
     bitField[byteIndex] |= (1 << (7 - offset));
+}
+
+std::string toBinary(int n)
+{
+    std::string r;
+    while(n!=0) {r=(n%2==0 ?"0":"1")+r; n/=2;}
+    return r;
+}
+
+/**
+ * Converts a series of bytes in a string format to an integer.
+ */
+int bytesToInt(std::string bytes)
+{
+    // FIXME: Use bitwise operation to convert
+    std::string binStr;
+    int byteCount = bytes.size();
+    for (int i = 0; i < byteCount; i++)
+        binStr += std::bitset<8>(bytes[i]).to_string();
+    return stoi(binStr, 0, 2);
 }

@@ -9,6 +9,7 @@
 #include <vector>
 #include <ctime>
 #include <mutex>
+#include <fstream>
 
 #include "Piece.h"
 #include "TorrentFileParser.h"
@@ -29,11 +30,15 @@ struct PendingRequest
 class PieceManager
 {
 private:
+
     std::map<std::string, std::string> peers;
     std::vector<Piece*> missingPieces;
     std::vector<Piece*> ongoingPieces;
+    std::vector<Piece*> havePieces;
     std::vector<PendingRequest*> pendingRequests;
     const TorrentFileParser& fileParser;
+    std::ofstream downloadedFile;
+    int totalPieces;
 
     // Uses a lock to prevent race condition
     std::mutex lock;
@@ -42,10 +47,14 @@ private:
     Block* expiredRequest(std::string peerId);
     Block* nextOngoing(std::string peerId);
     Piece* getRarestPiece(std::string peerId);
+    void write(Piece* piece);
 public:
-    explicit PieceManager(const TorrentFileParser& fileParser);
+    explicit PieceManager(const TorrentFileParser& fileParser, const std::string& downloadPath);
     ~PieceManager();
+    bool isComplete();
+    void blockReceived(std::string peerId, int pieceIndex, int blockOffset, std::string data);
     void addPeer(const std::string& peerId, std::string bitField);
+    void removePeer(std::string peerId);
     void updatePeer(std::string peerId, int index);
     Block* nextRequest(std::string peerId);
 };

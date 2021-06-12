@@ -29,10 +29,10 @@ private:
     std::string peerId;
     int port;
     long fileSize;
-    std::vector<Peer> decodeResponse(std::string response);
+    std::vector<Peer*> decodeResponse(std::string response);
 public:
     explicit PeerRetriever(std::string peerId, std::string announceUrL, std::string infoHash, int port, long fileSize);
-    std::vector<Peer> retrievePeers();
+    std::vector<Peer*> retrievePeers();
 };
 
 #endif //BITTORRENTCLIENT_PEERRETRIEVER_H

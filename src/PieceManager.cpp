@@ -15,9 +15,14 @@
 #define BLOCK_SIZE 16384         // 2 ^ 14
 #define MAX_PENDING_TIME 120     // 2 minutes
 
-PieceManager::PieceManager(const TorrentFileParser& fileParser): fileParser(fileParser)
+PieceManager::PieceManager(const TorrentFileParser& fileParser, const std::string& downloadPath): fileParser(fileParser)
 {
     missingPieces = initiatePieces();
+    // Creates the destination file with the file size specified in the Torrent file
+    downloadedFile.open(downloadPath, std::ios::binary | std::ios::out);
+    downloadedFile.seekp(fileParser.getFileSize() - 1);
+    downloadedFile.write("", 1);
+
 //    for (const Piece* piece : missingPieces)
 //    {
 //        for (Block* block : piece->blocks)
@@ -41,6 +46,8 @@ PieceManager::~PieceManager() {
 
     for (PendingRequest* pending : pendingRequests)
         delete pending;
+
+    downloadedFile.close();
 }
 
 
@@ -52,28 +59,21 @@ PieceManager::~PieceManager() {
 std::vector<Piece*> PieceManager::initiatePieces()
 {
     std::vector<std::string> pieceHashes = fileParser.splitPieceHashes();
-    int piecesCount = pieceHashes.size();
+    totalPieces = pieceHashes.size();
     std::vector<Piece*> torrentPieces;
-    missingPieces.reserve(piecesCount);
+    missingPieces.reserve(totalPieces);
 
-    std::shared_ptr<bencoding::BItem> totalLengthValue = fileParser.get("length");
-    if (!totalLengthValue)
-        throw std::runtime_error("Torrent file is malformed. [File does not contain key 'length']");
-    long totalLength = std::dynamic_pointer_cast<bencoding::BInteger>(totalLengthValue)->value();
-
-    std::shared_ptr<bencoding::BItem> pieceLengthValue = fileParser.get("piece length");
-    if (!pieceLengthValue)
-        throw std::runtime_error("Torrent file is malformed. [File does not contain key 'piece length']");
-    long pieceLength = std::dynamic_pointer_cast<bencoding::BInteger>(pieceLengthValue)->value();
+    long totalLength = fileParser.getFileSize();
+    long pieceLength = fileParser.getPieceLength();
 
     // number of blocks in a normal piece (i.e. pieces that are not the last one)
     int blockCount = ceil(pieceLength / BLOCK_SIZE);
     long remLength = pieceLength;
 
-    for (int i = 0; i < piecesCount; i++)
+    for (int i = 0; i < totalPieces; i++)
     {
         // The final piece is likely to have a smaller size.
-        if (i == piecesCount - 1)
+        if (i == totalPieces - 1)
         {
             remLength = totalLength % pieceLength;
             blockCount = std::max((int) ceil(remLength / BLOCK_SIZE), 1);
@@ -88,7 +88,7 @@ std::vector<Piece*> PieceManager::initiatePieces()
             block->status = missing;
             block->offset = offset * BLOCK_SIZE;
             int blockSize = BLOCK_SIZE;
-            if (i == piecesCount - 1 && offset == blockCount - 1)
+            if (i == totalPieces - 1 && offset == blockCount - 1)
                 blockSize = remLength % BLOCK_SIZE;
             block->length = blockSize;
             blocks.push_back(block);
@@ -99,6 +99,16 @@ std::vector<Piece*> PieceManager::initiatePieces()
     return torrentPieces;
 }
 
+/**
+ * Checks if all Pieces have been downloaded.
+ * @return true if all Pieces are present false otherwise.
+ */
+bool PieceManager::isComplete() {
+    lock.lock();
+    bool isComplete = havePieces.size() == totalPieces;
+    lock.unlock();
+    return isComplete;
+}
 
 /**
  * Adds a peer and the BitField representing the pieces the peer has.
@@ -115,8 +125,26 @@ void PieceManager::addPeer(const std::string& peerId, std::string bitField)
  */
 void PieceManager::updatePeer(std::string peerId, int index)
 {
-
+    if (peers.find(peerId) != peers.end())
+        setPiece(peers[peerId], index);
+    else
+        throw std::runtime_error("Connection has not been established with peer " + peerId);
 }
+
+/**
+ * Removes a previous added peer in case of a connection lost.
+ * @param peerId: Id of the peer to be removed.
+ */
+void PieceManager::removePeer(std::string peerId)
+{
+    auto iter = peers.find(peerId);
+    if (iter != peers.end())
+        peers.erase(iter);
+    else
+        throw std::runtime_error("Attempting to remove a peer " + peerId +
+                                 " with whom a connection has not been established.");
+}
+
 
 /**
  * Get the next block that should be requested from the given peer.
@@ -139,6 +167,9 @@ Block* PieceManager::nextRequest(std::string peerId)
 
     // If the peer has not been added yet
     if (peers.find(peerId) == peers.end())
+        return nullptr;
+
+    if (isComplete())
         return nullptr;
 
     lock.lock();
@@ -212,8 +243,11 @@ Block* PieceManager::nextOngoing(std::string peerId)
  * Given the list of missing pieces, finds the rarest one (i.e. a piece
  * which is owned by the fewest number of peers).
  */
-Piece* PieceManager::getRarestPiece(std::string peerId) {
-    std::map<Piece*, int> pieceCount;
+Piece* PieceManager::getRarestPiece(std::string peerId)
+{
+    // Custom comparator to make sure that the map is ordered by the index of the Piece.
+    auto comp = [](const Piece* a, const Piece* b) { return a->index < b->index; };
+    std::map<Piece*, int, decltype(comp)> pieceCount(comp);
     for (Piece* piece : missingPieces)
     {
         // If a connection has been established with the peer
@@ -236,8 +270,89 @@ Piece* PieceManager::getRarestPiece(std::string peerId) {
     }
 
     missingPieces.erase(
-    std::remove(missingPieces.begin(), missingPieces.end(), rarest), missingPieces.end()
+            std::remove(missingPieces.begin(), missingPieces.end(), rarest),
+            missingPieces.end()
     );
     ongoingPieces.push_back(rarest);
     return rarest;
+}
+
+/**
+ * This method is called when a block of data has been received successfully.
+ * Once an entire Piece has been received, a SHA1 hash is computed on the data
+ * of all the retrieved blocks in the Piece. The hash will be compared to
+ * that from the Torrent meta-info. If a mismatch is detected, all the blocks
+ * in the Piece will be reset to a missing state. If the hash matches, the data
+ * in the Piece will be written to disk.
+ */
+void PieceManager::blockReceived(std::string peerId, int pieceIndex, int blockOffset, std::string data)
+{
+    std::cout << "Received block " + std::to_string(blockOffset) +
+                 " for piece " + std::to_string(pieceIndex) +
+                 " from peer " + peerId << std::endl;
+
+    // Removes the received block from pending requests
+    PendingRequest* requestToRemove = nullptr;
+    for (PendingRequest* pending : pendingRequests)
+    {
+        if (pending->block->piece == pieceIndex && pending->block->offset == blockOffset)
+        {
+            requestToRemove = pending;
+            break;
+        }
+    }
+
+    pendingRequests.erase(
+            std::remove(pendingRequests.begin(), pendingRequests.end(), requestToRemove),
+            pendingRequests.end()
+    );
+
+    // Retrieves the Piece to which this Block belongs
+    Piece* targetPiece = nullptr;
+    for (Piece* piece : ongoingPieces)
+    {
+        if (piece->index == pieceIndex)
+        {
+            targetPiece = piece;
+            break;
+        }
+    }
+    if (!targetPiece)
+        throw std::runtime_error("Received Block does not belong to any ongoing Piece.");
+
+    targetPiece->blockReceived(blockOffset, std::move(data));
+    if (targetPiece->isComplete())
+    {
+        // If the Piece is completed and the hash matches,
+        // writes the Piece to disk
+        if (targetPiece->isHashMatching())
+        {
+            write(targetPiece);
+            // Removes the Piece from the ongoing list
+            ongoingPieces.erase(
+                    std::remove(ongoingPieces.begin(), ongoingPieces.end(), targetPiece),
+                    ongoingPieces.end()
+            );
+
+            havePieces.push_back(targetPiece);
+            std::cout << std::to_string(havePieces.size()) + " / " + std::to_string(totalPieces) +
+                         " Pieces downloaded..." << std::endl;
+        }
+        else
+        {
+            targetPiece->reset();
+        }
+    }
+}
+
+/**
+ * Writes the given Piece to disk.
+ */
+void PieceManager::write(Piece* piece)
+{
+    lock.lock();
+    long position = piece->index * fileParser.getPieceLength();
+    downloadedFile.seekp(position);
+    downloadedFile << piece->getData();
+    lock.unlock();
 }

@@ -22,7 +22,7 @@ std::string BitTorrentMessage::toString() {
     char* messageLengthAddr = (char*) &messageLength;
     std::string messageLengthStr;
     // Bytes are pushed in reverse order, assuming the data
-    // is stored in small-endian order locally.
+    // is stored in little-endian order locally.
     for (int i = 0; i < 4; i++)
         messageLengthStr.push_back((char) messageLengthAddr[3 - i]);
     buffer << messageLengthStr;

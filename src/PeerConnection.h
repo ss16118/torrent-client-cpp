@@ -15,8 +15,9 @@ class PeerConnection
 {
 private:
     int sock{};
-    bool chocked = true;
-    const struct Peer peer;
+    bool choked = true;
+    bool requestPending = false;
+    const Peer* peer;
     const std::string clientId;
     const std::string infoHash;
     std::string peerBitField;
@@ -28,13 +29,15 @@ private:
     void receiveBitField();
     void sendInterested();
     void receiveUnchoke();
+    void requestPiece();
     BitTorrentMessage receiveMessage(int bufferSize = NULL) const;
 
 public:
     const std::string &getPeerId() const;
 
-    explicit PeerConnection(struct Peer peer, std::string clientId, std::string infoHash, PieceManager* pieceManager);
+    explicit PeerConnection(const Peer* peer, std::string clientId, std::string infoHash, PieceManager* pieceManager);
     ~PeerConnection();
+    void start();
     void establishNewConnection();
 };
 

@@ -28,8 +28,8 @@ TorrentFileParser::TorrentFileParser(std::string filePath)
     std::shared_ptr<bencoding::BDictionary> rootDict =
             std::dynamic_pointer_cast<bencoding::BDictionary>(decodedTorrentFile);
     root = rootDict;
-    std::string prettyRepr = bencoding::getPrettyRepr(decodedTorrentFile);
-    std::cout << prettyRepr << std::endl;
+//    std::string prettyRepr = bencoding::getPrettyRepr(decodedTorrentFile);
+//    std::cout << prettyRepr << std::endl;
 }
 
 /**
@@ -75,4 +75,26 @@ std::vector<std::string> TorrentFileParser::splitPieceHashes() const {
     for (int i = 0; i < piecesCount; i++)
         pieceHashes.push_back(pieces.substr(i * HASH_LEN, HASH_LEN));
     return pieceHashes;
+}
+
+/**
+ * Retrieves the total size of the file to be downloaded.
+ */
+long TorrentFileParser::getFileSize() const {
+    std::shared_ptr<bencoding::BItem> fileSizeItem = get("length");
+    if (!fileSizeItem)
+        throw std::runtime_error("Torrent file is malformed. [File does not contain key 'length']");
+    long fileSize = std::dynamic_pointer_cast<bencoding::BInteger>(fileSizeItem)->value();
+    return fileSize;
+}
+
+/**
+ * Retrieves the length of a single piece as per the Torrent file.
+ */
+long TorrentFileParser::getPieceLength() const {
+    std::shared_ptr<bencoding::BItem> pieceLengthItem = get("piece length");
+    if (!pieceLengthItem)
+        throw std::runtime_error("Torrent file is malformed. [File does not contain key 'piece length']");
+    long pieceLength = std::dynamic_pointer_cast<bencoding::BInteger>(pieceLengthItem)->value();
+    return pieceLength;
 }
