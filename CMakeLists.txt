@@ -5,13 +5,15 @@ set(CMAKE_CXX_STANDARD 17)
 include_directories(lib)
 include_directories(include)
 
-file(GLOB BENCODING_SRC "lib/bencode/*.cpp" "include/bencode/*.h")
-
 # Bencoding
+file(GLOB BENCODING_SRC "lib/bencode/*.cpp" "include/bencode/*.h")
 add_library(bencoding STATIC ${BENCODING_SRC})
 
 # SHA1
 add_library(crypto STATIC lib/crypto/sha1.h lib/crypto/sha1.cpp)
+
+# loguru
+add_library(loguru STATIC lib/loguru/loguru.cpp lib/loguru/loguru.hpp)
 
 # cpr
 include(FetchContent)
@@ -31,6 +33,6 @@ else()
     # Error; with REQUIRED, pkg_search_module() will throw an error by it's own
 endif()
 
-add_executable(BitTorrentClient src/main.cpp src/TorrentFileParser.cpp src/TorrentFileParser.h src/PeerRetriever.h src/PeerRetriever.cpp src/utils.cpp src/utils.h src/PeerConnection.cpp src/PeerConnection.h src/connect.cpp src/connect.h src/TorrentClient.h src/TorrentClient.cpp src/BitTorrentMessage.h src/BitTorrentMessage.cpp src/PieceManager.h src/PieceManager.cpp src/Piece.h src/Piece.cpp src/Block.h)
+add_executable(BitTorrentClient src/main.cpp src/TorrentFileParser.cpp src/TorrentFileParser.h src/PeerRetriever.h src/PeerRetriever.cpp src/utils.cpp src/utils.h src/PeerConnection.cpp src/PeerConnection.h src/connect.cpp src/connect.h src/TorrentClient.h src/TorrentClient.cpp src/BitTorrentMessage.h src/BitTorrentMessage.cpp src/PieceManager.h src/PieceManager.cpp src/Piece.h src/Piece.cpp src/Block.h src/SharedQueue.h)
 
-target_link_libraries(BitTorrentClient PRIVATE bencoding crypto cpr ${CURL_LIBRARIES} ${OPENSSL_LIBRARIES})
+target_link_libraries(BitTorrentClient PRIVATE bencoding crypto cpr loguru ${CURL_LIBRARIES} ${OPENSSL_LIBRARIES})

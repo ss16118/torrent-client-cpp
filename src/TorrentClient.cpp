@@ -6,16 +6,19 @@
 #include <iostream>
 #include <thread>
 #include <bencode/bencoding.h>
+#include <loguru/loguru.hpp>
+
 #include "PieceManager.h"
 #include "TorrentClient.h"
 #include "TorrentFileParser.h"
 #include "PeerRetriever.h"
 #include "PeerConnection.h"
 
-#define MAX_PEER_CONNECTIONS 10
+#define MAX_PEER_CONNECTIONS 5
 #define PORT 8080
+#define PEER_QUERY_INTERVAL 300000 // 5 minutes
 
-TorrentClient::TorrentClient()
+TorrentClient::TorrentClient(bool enableLogging)
 {
     // Generate a random 20-byte peer Id for the client as per the convention described
     // on the following web page.
@@ -27,57 +30,111 @@ TorrentClient::TorrentClient()
     std::uniform_int_distribution<> distrib(1, 9);
     for (int i = 0; i < 12; i++)
         peerId += std::to_string(distrib(gen));
+
+    // Initiates the logger if logging is enabled
+    if (enableLogging)
+    {
+        loguru::g_stderr_verbosity = loguru::Verbosity_ERROR;
+        loguru::add_file("../logs/log.txt", loguru::Truncate, loguru::Verbosity_MAX);
+    }
+    else
+    {
+        loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+    }
 }
 
 /**
  * Ensures that all resources are freed when TorrentClient is destroyed
  */
-TorrentClient::~TorrentClient()
-{
-    for (Peer* peer : peers)
-        delete peer;
-}
+TorrentClient::~TorrentClient() = default;
 
 /**
  * Download the file as per the content of the given Torrent file.
  * @param torrentFilePath: path to the Torrent file.
- * @param downloadPath: path of the file when it is finished (i.e. the destination path).
+ * @param downloadPath: directory of the file when it is finished (i.e. the destination directory).
  */
-void TorrentClient::downloadFile(const std::string& torrentFilePath, const std::string& downloadPath)
+void TorrentClient::downloadFile(const std::string& torrentFilePath, const std::string& downloadDirectory)
 {
     // Parse Torrent file
+    std::cout << "Parsing Torrent file " + torrentFilePath + "..." << std::endl;
     TorrentFileParser torrentFileParser(torrentFilePath);
-    std::string announceUrl = std::dynamic_pointer_cast<bencoding::BString>(torrentFileParser.get("announce"))->value();
+    std::string announceUrl = torrentFileParser.getAnnounce();
 
     long fileSize = torrentFileParser.getFileSize();
     const std::string infoHash = torrentFileParser.getInfoHash();
 
+    std::string filename = torrentFileParser.getFileName();
+    std::string downloadPath = downloadDirectory + "/" + filename;
     PieceManager pieceManager(torrentFileParser, downloadPath);
 
-    // Retrieve peers from the tracker
-    PeerRetriever peerRetriever(peerId, announceUrl, infoHash, PORT, fileSize);
-    peers = peerRetriever.retrievePeers();
-
-    std::vector<std::thread> threads;
-
-    // Connect to peers
-    if (!peers.empty())
+    // Adds threads to the thread pool
+    for (int i = 0; i < MAX_PEER_CONNECTIONS; i++)
     {
-        PeerConnection connection(peers[0], peerId, infoHash, &pieceManager);
-        peerConnections.push_back(connection);
+        PeerConnection connection(&queue, peerId, infoHash, &pieceManager);
+        connections.push_back(&connection);
         std::thread thread(&PeerConnection::start, connection);
-        threads.push_back(std::move(thread));
-//        Block* block = pieceManager.nextRequest(connection.getPeerId());
-//
-//        std::cout << "[DEBUG] Block piece: " << std::to_string(block->piece) << std::endl;
-//        std::cout << "[DEBUG] Block offset: " << std::to_string(block->offset) << std::endl;
-//        std::cout << "[DEBUG] Block length: " << std::to_string(block->length) << std::endl;
-//        std::cout << "[DEBUG] Block status: " << std::to_string(block->status) << std::endl;
+        threadPool.push_back(std::move(thread));
     }
-    for (std::thread& thread : threads)
+
+    time_t lastPeerQuery = (time_t) (-1);
+
+    std::cout << "Download initiated..." << std::endl;
+    while (true)
+    {
+        if (pieceManager.isComplete())
+            break;
+
+        if (terminated)
+            break;
+
+        time_t currentTime = std::time(nullptr);
+        auto diff = std::difftime(currentTime, lastPeerQuery);
+        // Retrieve peers from the tracker after a certain period of time
+        if (lastPeerQuery == -1 || diff >= PEER_QUERY_INTERVAL || queue.empty())
+        {
+            LOG_F(INFO, "Retrieving peers from tracker: %s...", announceUrl.c_str());
+            PeerRetriever peerRetriever(peerId, announceUrl, infoHash, PORT, fileSize);
+            std::vector<Peer*> peers = peerRetriever.retrievePeers();
+
+            if (!peers.empty())
+            {
+                lastPeerQuery = currentTime;
+                queue.clear();
+                for (auto peer : peers)
+                    queue.push_back(peer);
+
+            }
+        }
+
+    }
+
+    if (pieceManager.isComplete())
+    {
+        terminate();
+        std::cout << "Download completed!" << std::endl;
+        std::cout << "File downloaded to " << downloadPath << std::endl;
+    }
+}
+
+/**
+ * Terminates the download and cleans up all the resources
+ */
+void TorrentClient::terminate()
+{
+    std::unique_lock<std::mutex> lock(threadPoolMutex);
+    terminated = true;
+
+
+    for (auto connection : connections)
+        connection->stop();
+
+    queue.notifyAll();
+
+    for (std::thread& thread : threadPool)
     {
         if (thread.joinable())
             thread.join();
     }
-    std::cout << "File downloaded to " << downloadPath << std::endl;
+
+    threadPool.clear();
 }

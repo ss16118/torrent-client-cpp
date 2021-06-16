@@ -6,7 +6,9 @@
 #include <ctime>
 #include <iostream>
 #include <algorithm>
+#include <loguru/loguru.hpp>
 #include <bencode/bencoding.h>
+#include <iomanip>
 
 #include "PieceManager.h"
 #include "Block.h"
@@ -166,13 +168,20 @@ Block* PieceManager::nextRequest(std::string peerId)
     // 3. Check if this peer have any of the missing pieces not yet started
 
     // If the peer has not been added yet
-    if (peers.find(peerId) == peers.end())
-        return nullptr;
-
-    if (isComplete())
-        return nullptr;
 
     lock.lock();
+    if (missingPieces.empty())
+    {
+        lock.unlock();
+        return nullptr;
+    }
+
+    if (peers.find(peerId) == peers.end())
+    {
+        lock.unlock();
+        return nullptr;
+    }
+
     Block* block = expiredRequest(peerId);
     if (!block)
     {
@@ -287,10 +296,7 @@ Piece* PieceManager::getRarestPiece(std::string peerId)
  */
 void PieceManager::blockReceived(std::string peerId, int pieceIndex, int blockOffset, std::string data)
 {
-    std::cout << "Received block " + std::to_string(blockOffset) +
-                 " for piece " + std::to_string(pieceIndex) +
-                 " from peer " + peerId << std::endl;
-
+    LOG_F(INFO, "Received block %d for piece %d from peer %s", blockOffset, pieceIndex, peerId.c_str());
     // Removes the received block from pending requests
     PendingRequest* requestToRemove = nullptr;
     for (PendingRequest* pending : pendingRequests)
@@ -335,8 +341,11 @@ void PieceManager::blockReceived(std::string peerId, int pieceIndex, int blockOf
             );
 
             havePieces.push_back(targetPiece);
-            std::cout << std::to_string(havePieces.size()) + " / " + std::to_string(totalPieces) +
-                         " Pieces downloaded..." << std::endl;
+            std::stringstream info;
+            info << "(" << std::fixed << std::setprecision(2) << (((float) havePieces.size()) / (float) totalPieces * 100) << "%) ";
+            info << std::to_string(havePieces.size()) + " / " + std::to_string(totalPieces) + " Pieces downloaded...";
+            std::cout << info.str() << std::endl;
+            LOG_F(INFO, "%s", info.str().c_str());
         }
         else
         {

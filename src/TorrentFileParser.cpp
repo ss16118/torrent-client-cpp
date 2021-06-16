@@ -10,6 +10,7 @@
 #include <bencode/Decoder.h>
 #include <bencode/bencoding.h>
 #include <crypto/sha1.h>
+#include <loguru/loguru.hpp>
 
 #include "TorrentFileParser.h"
 #define HASH_LEN 20
@@ -21,13 +22,15 @@
  * in the instance attribute fileString.
  * @param filePath: path of the torrent file.
  */
-TorrentFileParser::TorrentFileParser(std::string filePath)
+TorrentFileParser::TorrentFileParser(const std::string& filePath)
 {
+    LOG_F(INFO, "Parsing Torrent file %s...", filePath.c_str());
     std::ifstream fileStream(filePath, std::ifstream::binary);
     std::shared_ptr<bencoding::BItem> decodedTorrentFile = bencoding::decode(fileStream);
     std::shared_ptr<bencoding::BDictionary> rootDict =
             std::dynamic_pointer_cast<bencoding::BDictionary>(decodedTorrentFile);
     root = rootDict;
+    LOG_F(INFO, "Parse Torrent file: SUCCESS");
 //    std::string prettyRepr = bencoding::getPrettyRepr(decodedTorrentFile);
 //    std::cout << prettyRepr << std::endl;
 }
@@ -97,4 +100,29 @@ long TorrentFileParser::getPieceLength() const {
         throw std::runtime_error("Torrent file is malformed. [File does not contain key 'piece length']");
     long pieceLength = std::dynamic_pointer_cast<bencoding::BInteger>(pieceLengthItem)->value();
     return pieceLength;
+}
+
+/**
+ * Retrieves the file name of the file to download. Assuming there is
+ * only one downloadable file.
+ */
+std::string TorrentFileParser::getFileName() const
+{
+    std::shared_ptr<bencoding::BItem> filenameItem = get("name");
+    if (!filenameItem)
+        throw std::runtime_error("Torrent file is malformed. [File does not contain key 'name']");
+    std::string filename = std::dynamic_pointer_cast<bencoding::BString>(filenameItem)->value();
+    return filename;
+}
+
+/**
+ * Retrieves the announce URL from the Torrent file.
+ */
+std::string TorrentFileParser::getAnnounce() const
+{
+    std::shared_ptr<bencoding::BItem> announceItem = get("announce");
+    if (!announceItem)
+        throw std::runtime_error("Torrent file is malformed. [File does not contain key 'announce']");
+    std::string announce = std::dynamic_pointer_cast<bencoding::BString>(announceItem)->value();
+    return announce;
 }

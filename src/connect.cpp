@@ -7,9 +7,12 @@
 #include <stdexcept>
 #include <cstring>
 #include <iostream>
+#include <chrono>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/poll.h>
+#include <loguru/loguru.hpp>
 #include "connect.h"
 #include "utils.h"
 
@@ -125,7 +128,19 @@ void sendData(const int sock, const std::string& data)
  */
 std::string receiveData(const int sock, int bufferSize)
 {
+
     std::string reply;
+
+    // Sets timeout on the socket for read operation
+//    struct timeval tv;
+//    tv.tv_sec = READ_TIMEOUT;
+//    tv.tv_usec = 0;
+//    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+    struct pollfd fd;
+    int ret;
+    fd.fd = sock;
+    fd.events = POLLIN;
+    ret = poll(&fd, 1, READ_TIMEOUT * 1000);
 
     // If buffer size is not specified, read the first 4 bytes of the message
     // to obtain the total length of the response.
@@ -133,8 +148,17 @@ std::string receiveData(const int sock, int bufferSize)
     {
         const int lengthIndicatorSize = 4;
         char buffer[lengthIndicatorSize];
-        if (read(sock, buffer, sizeof(buffer)) < 0)
-            return reply;
+        switch(ret)
+        {
+            case -1:
+                return reply;
+            case 0:
+                throw std::runtime_error("Read timeout from socket " + std::to_string(sock));
+            default:
+                read(sock, buffer, sizeof(buffer));
+        }
+//        if (read(sock, buffer, sizeof(buffer)) < 0)
+//            return reply;
         std::string messageLengthStr;
         for (char i : buffer)
             messageLengthStr += i;
@@ -149,16 +173,14 @@ std::string receiveData(const int sock, int bufferSize)
     // Keeps reading from the buffer until all expected bytes are received
     int bytesRead = 0;
     int bytesToRead = bufferSize - bytesRead;
-
-    // Sets timeout on the socket for read operation
-    struct timeval tv;
-    tv.tv_sec = READ_TIMEOUT;
-    tv.tv_usec = 0;
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
-
+    auto startTime = std::chrono::steady_clock::now();
     do
     {
-        bytesRead = read(sock, buffer, sizeof(buffer));
+        auto diff = std::chrono::steady_clock::now() - startTime;
+        if (std::chrono::duration<double, std::milli> (diff).count() > READ_TIMEOUT * 1000)
+            throw std::runtime_error("Read timeout from socket " + std::to_string(sock));
+        bytesRead = recv(sock, buffer, sizeof(buffer), 0);
+        // bytesRead = read(sock, buffer, sizeof(buffer));
         bytesToRead -= bytesRead;
         if (bytesRead < 0)
             throw std::runtime_error("Failed to receive data from socket " + std::to_string(sock));

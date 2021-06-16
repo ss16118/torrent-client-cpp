@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <bitset>
 #include <bencode/bencoding.h>
+#include <loguru/loguru.hpp>
 
 #include "utils.h"
 #include "PeerRetriever.h"
@@ -47,15 +48,18 @@ PeerRetriever::PeerRetriever(std::string peerId, std::string announceUrl, std::s
  */
 std::vector<Peer*> PeerRetriever::retrievePeers()
 {
-    std::cout << "Retrieving peers from " << announceUrl << " with the following parameters..." << std::endl;
+    std::stringstream info;
+    info << "Retrieving peers from " << announceUrl << " with the following parameters..." << std::endl;
     // Note that info hash will be URL-encoded by the cpr library
-    std::cout << "info_hash: " << infoHash << std::endl;
-    std::cout << "peer_id: " << peerId << std::endl;
-    std::cout << "port: " << port << std::endl;
-    std::cout << "uploaded: " << 0 << std::endl;
-    std::cout << "downloaded: " << 0 << std::endl;
-    std::cout << "left: " << std::to_string(fileSize) << std::endl;
-    std::cout << "compact: " << std::to_string(1) << std::endl;
+    info << "info_hash: " << infoHash << std::endl;
+    info << "peer_id: " << peerId << std::endl;
+    info << "port: " << port << std::endl;
+    info << "uploaded: " << 0 << std::endl;
+    info << "downloaded: " << 0 << std::endl;
+    info << "left: " << std::to_string(fileSize) << std::endl;
+    info << "compact: " << std::to_string(1);
+
+    LOG_F(INFO, "%s", info.str().c_str());
 
     cpr::Response res = cpr::Get(cpr::Url{announceUrl}, cpr::Parameters {
             { "info_hash", std::string(hexDecode(infoHash)) },
@@ -71,7 +75,7 @@ std::vector<Peer*> PeerRetriever::retrievePeers()
     // If response successfully retrieved
     if (res.status_code == 200)
     {
-        std::cout << "Retrieve response from tracker: SUCCESS" << std::endl;
+        LOG_F(INFO, "Retrieve response from tracker: SUCCESS");
 //        std::shared_ptr<bencoding::BItem> decodedResponse = bencoding::decode(res.text);
 //        std::string formattedResponse = bencoding::getPrettyRepr(decodedResponse);
 //        std::cout << formattedResponse << std::endl;
@@ -80,8 +84,7 @@ std::vector<Peer*> PeerRetriever::retrievePeers()
     }
     else
     {
-        std::cout << "Retrieving response from tracker: FAILED [ " << std::to_string(res.status_code) << ": "
-        << res.text << " ]" << std::endl;
+        LOG_F(ERROR, "Retrieving response from tracker: FAILED [ %d: %s ]", res.status_code, res.text.c_str());
     }
     return std::vector<Peer*>();
 }
@@ -95,7 +98,7 @@ std::vector<Peer*> PeerRetriever::retrievePeers()
  * other two files.
  */
 std::vector<Peer*> PeerRetriever::decodeResponse(std::string response) {
-    std::cout << "Decoding tracker response..." << std::endl;
+    LOG_F(INFO, "Decoding tracker response...");
     std::shared_ptr<bencoding::BItem> decodedResponse = bencoding::decode(response);
 
     std::shared_ptr<bencoding::BDictionary> responseDict =
@@ -167,8 +170,8 @@ std::vector<Peer*> PeerRetriever::decodeResponse(std::string response) {
         throw std::runtime_error(
                 "Response returned by the tracker is not in the correct format. ['peers' has the wrong type]");
     }
-    std::cout << "Decode tracker response: SUCCESS" << std::endl;
-    std::cout << "Number of peers discovered: " << std::to_string(peers.size()) << std::endl;
+    LOG_F(INFO, "Decode tracker response: SUCCESS");
+    LOG_F(INFO, "Number of peers discovered: %zu", peers.size());
     return peers;
 }
 

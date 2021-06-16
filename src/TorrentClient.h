@@ -8,17 +8,22 @@
 #include <string>
 #include "PeerRetriever.h"
 #include "PeerConnection.h"
+#include "SharedQueue.h"
 
 class TorrentClient
 {
 private:
+    bool terminated = false;
     std::string peerId;
-    std::vector<Peer*> peers;
-    std::vector<PeerConnection> peerConnections;
+    SharedQueue<Peer*> queue;
+    std::vector<std::thread> threadPool;
+    std::vector<PeerConnection*> connections;
+    std::mutex threadPoolMutex;
 public:
-    explicit TorrentClient();
+    explicit TorrentClient(bool enableLogging = true);
     ~TorrentClient();
-    void downloadFile(const std::string& torrentFilePath, const std::string& downloadPath);
+    void terminate();
+    void downloadFile(const std::string& torrentFilePath, const std::string& downloadDirectory);
 };
 
 #endif //BITTORRENTCLIENT_TORRENTCLIENT_H
