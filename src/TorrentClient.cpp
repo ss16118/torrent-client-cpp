@@ -14,11 +14,10 @@
 #include "PeerRetriever.h"
 #include "PeerConnection.h"
 
-#define MAX_PEER_CONNECTIONS 5
 #define PORT 8080
-#define PEER_QUERY_INTERVAL 300000 // 5 minutes
+#define PEER_QUERY_INTERVAL 60 // 1 minute
 
-TorrentClient::TorrentClient(bool enableLogging)
+TorrentClient::TorrentClient(const int threadNum, bool enableLogging): threadNum(threadNum)
 {
     // Generate a random 20-byte peer Id for the client as per the convention described
     // on the following web page.
@@ -34,8 +33,9 @@ TorrentClient::TorrentClient(bool enableLogging)
     // Initiates the logger if logging is enabled
     if (enableLogging)
     {
-        loguru::g_stderr_verbosity = loguru::Verbosity_ERROR;
-        loguru::add_file("../logs/log.txt", loguru::Truncate, loguru::Verbosity_MAX);
+        loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+        loguru::g_flush_interval_ms = 1000;
+        loguru::add_file("../logs/client.log", loguru::Truncate, loguru::Verbosity_MAX);
     }
     else
     {
@@ -64,11 +64,11 @@ void TorrentClient::downloadFile(const std::string& torrentFilePath, const std::
     const std::string infoHash = torrentFileParser.getInfoHash();
 
     std::string filename = torrentFileParser.getFileName();
-    std::string downloadPath = downloadDirectory + "/" + filename;
-    PieceManager pieceManager(torrentFileParser, downloadPath);
+    std::string downloadPath = downloadDirectory + filename;
+    PieceManager pieceManager(torrentFileParser, downloadPath, threadNum);
 
     // Adds threads to the thread pool
-    for (int i = 0; i < MAX_PEER_CONNECTIONS; i++)
+    for (int i = 0; i < threadNum; i++)
     {
         PeerConnection connection(&queue, peerId, infoHash, &pieceManager);
         connections.push_back(&connection);
@@ -76,7 +76,7 @@ void TorrentClient::downloadFile(const std::string& torrentFilePath, const std::
         threadPool.push_back(std::move(thread));
     }
 
-    time_t lastPeerQuery = (time_t) (-1);
+    auto lastPeerQuery = (time_t) (-1);
 
     std::cout << "Download initiated..." << std::endl;
     while (true)
@@ -89,7 +89,11 @@ void TorrentClient::downloadFile(const std::string& torrentFilePath, const std::
 
         time_t currentTime = std::time(nullptr);
         auto diff = std::difftime(currentTime, lastPeerQuery);
-        // Retrieve peers from the tracker after a certain period of time
+        // Retrieve peers from the tracker after a certain time interval or whenever
+        // the queue is empty
+        // FIXME: It is an inadequate solution to the problem caused
+        // by threads not terminating at the end due to the fact
+        // that they are blocked by an empty queue.
         if (lastPeerQuery == -1 || diff >= PEER_QUERY_INTERVAL || queue.empty())
         {
             LOG_F(INFO, "Retrieving peers from tracker: %s...", announceUrl.c_str());
@@ -121,14 +125,10 @@ void TorrentClient::downloadFile(const std::string& torrentFilePath, const std::
  */
 void TorrentClient::terminate()
 {
-    std::unique_lock<std::mutex> lock(threadPoolMutex);
     terminated = true;
-
 
     for (auto connection : connections)
         connection->stop();
-
-    queue.notifyAll();
 
     for (std::thread& thread : threadPool)
     {

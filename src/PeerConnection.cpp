@@ -55,47 +55,50 @@ void PeerConnection::start() {
         {
             // Establishes connection with the peer, and lets it know
             // that we are interested.
-            establishNewConnection();
-            while (!pieceManager->isComplete())
+            if (establishNewConnection())
             {
-                BitTorrentMessage message = receiveMessage();
-                switch (message.getMessageId())
+                while (!pieceManager->isComplete())
                 {
-                    case choke:
-                        choked = true;
-                        break;
-
-                    case unchoke:
-                        choked = false;
-                        break;
-
-                    case piece:
+                    BitTorrentMessage message = receiveMessage();
+                    if (message.getMessageId() > 10)
+                        throw std::runtime_error("Received invalid message Id from peer " + peerId);
+                    switch (message.getMessageId())
                     {
-                        requestPending = false;
-                        std::string payload = message.getPayload();
-                        int index = bytesToInt(payload.substr(0, 4));
-                        int begin = bytesToInt(payload.substr(4, 4));
-                        std::string blockData = payload.substr(8);
-                        pieceManager->blockReceived(peerId, index, begin, blockData);
-                        break;
+                        case choke:
+                            choked = true;
+                            break;
+
+                        case unchoke:
+                            choked = false;
+                            break;
+
+                        case piece:
+                        {
+                            requestPending = false;
+                            std::string payload = message.getPayload();
+                            int index = bytesToInt(payload.substr(0, 4));
+                            int begin = bytesToInt(payload.substr(4, 4));
+                            std::string blockData = payload.substr(8);
+                            pieceManager->blockReceived(peerId, index, begin, blockData);
+                            break;
+                        }
+                        case have:
+                        {
+                            std::string payload = message.getPayload();
+                            int pieceIndex = bytesToInt(payload);
+                            pieceManager->updatePeer(peerId, pieceIndex);
+                            break;
+                        }
+
+                        default:
+                            break;
                     }
-                    case have:
+                    if (!choked)
                     {
-                        std::string payload = message.getPayload();
-                        int pieceIndex = bytesToInt(payload);
-                        pieceManager->updatePeer(peerId, pieceIndex);
-                        break;
-                    }
-
-                    default:
-                        break;
-                }
-                if (!choked)
-                {
-                    if (!requestPending)
-                    {
-                        requestPending = true;
-                        requestPiece();
+                        if (!requestPending)
+                        {
+                            requestPiece();
+                        }
                     }
                 }
             }
@@ -104,7 +107,7 @@ void PeerConnection::start() {
         {
             closeSock();
             LOG_F(ERROR, "An error occurred while downloading from peer %s [%s]", peerId.c_str(), peer->ip.c_str());
-            std::cout << e.what() << std::endl;
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 }
@@ -127,7 +130,14 @@ void PeerConnection::performHandshake()
 {
     // Connects to the peer
     LOG_F(INFO, "Connecting to peer [%s]...", peer->ip.c_str());
-    sock = createConnection(peer->ip, peer->port);
+    try
+    {
+        sock = createConnection(peer->ip, peer->port);
+    }
+    catch (std::runtime_error &e)
+    {
+        throw std::runtime_error("Cannot connect to peer [" + peer->ip + "]");
+    }
     LOG_F(INFO, "Establish TCP connection with peer at socket %d: SUCCESS", sock);
 
     // Send the handshake message to the peer
@@ -138,11 +148,11 @@ void PeerConnection::performHandshake()
 
     // Receive the reply from the peer
     LOG_F(INFO, "Receiving handshake reply from peer [%s]...", peer->ip.c_str());
-    auto start = std::chrono::steady_clock::now();
     std::string reply = receiveData(sock, handshakeMessage.length());
-    auto end = std::chrono::steady_clock::now();
-    LOG_F(INFO, "Receive handshake reply from peer: SUCCESS");
+    if (reply.empty())
+        throw std::runtime_error("Receive handshake from peer: FAILED [No response from peer]");
     peerId = reply.substr(PEER_ID_STARTING_POS, HASH_LEN);
+    LOG_F(INFO, "Receive handshake reply from peer: SUCCESS");
 
     // Compare the info hash from the peer's reply message with the info hash we sent.
     // If the two values are not the same, close the connection and raise an exception.
@@ -202,6 +212,7 @@ void PeerConnection::requestPiece() {
     LOG_F(INFO, "%s", info.str().c_str());
     std::string requestMessage = BitTorrentMessage(request, payload).toString();
     sendData(sock, requestMessage);
+    requestPending = true;
     LOG_F(INFO, "Send Request message: SUCCESS");
 }
 
@@ -240,25 +251,29 @@ void PeerConnection::receiveUnchoke() {
  * compares the info hashes.
  * 2. Receives and stores the BitField from the peer.
  * 3. Send an Interested message to the peer.
- * 4. Receives the Unchoke message from the peer.
+ *
+ * Returns true if a stable connection has been successfully established,
+ * false otherwise.
  *
  * To understand the details, the following links can be helpful:
  * - https://blog.jse.li/posts/torrent/
  * - https://markuseliasson.se/article/bittorrent-in-python/
  * - https://wiki.theory.org/BitTorrentSpecification#Handshake
  */
-void PeerConnection::establishNewConnection() {
+bool PeerConnection::establishNewConnection() {
     try
     {
         performHandshake();
         receiveBitField();
         sendInterested();
+        return true;
     }
     catch (const std::runtime_error& e)
     {
         closeSock();
         LOG_F(ERROR, "An error occurred while connecting with peer [%s]", peer->ip.c_str());
         LOG_F(ERROR, "%s", e.what());
+        return false;
     }
 }
 
@@ -301,8 +316,8 @@ std::string PeerConnection::createHandshakeMessage()
  * and payload can be accessed more easily.
  */
 BitTorrentMessage PeerConnection::receiveMessage(int bufferSize) const {
-    std::string reply = receiveData(sock, bufferSize);
-    if (reply.length() == 0)
+    std::string reply = receiveData(sock, 0);
+    if (reply.empty())
         return BitTorrentMessage(keepAlive);
     auto messageId = (uint8_t) reply[0];
     std::string payload = reply.substr(1);
@@ -325,9 +340,16 @@ void PeerConnection::closeSock()
 {
     if (sock)
     {
+        // Close socket
         LOG_F(INFO, "Closed connection at socket %d", sock);
         close(sock);
         sock = {};
+        requestPending = false;
+        // If the peer has been added to piece manager, remove it
+        if (!peerBitField.empty())
+        {
+            peerBitField.clear();
+            pieceManager->removePeer(peerId);
+        }
     }
-
 }

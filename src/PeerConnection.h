@@ -34,6 +34,7 @@ private:
     void receiveUnchoke();
     void requestPiece();
     void closeSock();
+    bool establishNewConnection();
     BitTorrentMessage receiveMessage(int bufferSize = NULL) const;
 
 public:
@@ -43,7 +44,6 @@ public:
     ~PeerConnection();
     void start();
     void stop();
-    void establishNewConnection();
 };
 
 

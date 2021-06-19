@@ -36,9 +36,11 @@ private:
     std::vector<Piece*> ongoingPieces;
     std::vector<Piece*> havePieces;
     std::vector<PendingRequest*> pendingRequests;
-    const TorrentFileParser& fileParser;
     std::ofstream downloadedFile;
-    int totalPieces;
+    const TorrentFileParser& fileParser;
+    const int maximumConnections;
+    time_t startingTime;
+    int totalPieces{};
 
     // Uses a lock to prevent race condition
     std::mutex lock;
@@ -48,14 +50,15 @@ private:
     Block* nextOngoing(std::string peerId);
     Piece* getRarestPiece(std::string peerId);
     void write(Piece* piece);
+    std::string getStatistics();
 public:
-    explicit PieceManager(const TorrentFileParser& fileParser, const std::string& downloadPath);
+    explicit PieceManager(const TorrentFileParser& fileParser, const std::string& downloadPath, int maximumConnections);
     ~PieceManager();
     bool isComplete();
     void blockReceived(std::string peerId, int pieceIndex, int blockOffset, std::string data);
     void addPeer(const std::string& peerId, std::string bitField);
-    void removePeer(std::string peerId);
-    void updatePeer(std::string peerId, int index);
+    void removePeer(const std::string& peerId);
+    void updatePeer(const std::string& peerId, int index);
     Block* nextRequest(std::string peerId);
 };
 

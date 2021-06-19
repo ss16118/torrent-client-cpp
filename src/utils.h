@@ -17,4 +17,6 @@ void setPiece(std::string& bitField, int index);
 
 int bytesToInt(std::string bytes);
 
+std::string formatTime(long seconds);
+
 #endif //BITTORRENTCLIENT_UTILS_H

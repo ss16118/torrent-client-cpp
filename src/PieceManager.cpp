@@ -17,23 +17,17 @@
 #define BLOCK_SIZE 16384         // 2 ^ 14
 #define MAX_PENDING_TIME 120     // 2 minutes
 
-PieceManager::PieceManager(const TorrentFileParser& fileParser, const std::string& downloadPath): fileParser(fileParser)
+PieceManager::PieceManager(
+    const TorrentFileParser& fileParser,
+    const std::string& downloadPath,
+    const int maximumConnections
+): fileParser(fileParser), maximumConnections(maximumConnections)
 {
     missingPieces = initiatePieces();
     // Creates the destination file with the file size specified in the Torrent file
     downloadedFile.open(downloadPath, std::ios::binary | std::ios::out);
     downloadedFile.seekp(fileParser.getFileSize() - 1);
     downloadedFile.write("", 1);
-
-//    for (const Piece* piece : missingPieces)
-//    {
-//        for (Block* block : piece->blocks)
-//        {
-//            std::cout << "[DEBUG] Block piece: " << std::to_string(block->piece) << std::endl;
-//            std::cout << "[DEBUG] Block offset: " << std::to_string(block->offset) << std::endl;
-//            std::cout << "[DEBUG] Block length: " << std::to_string(block->length) << std::endl;
-//        }
-//    }
 }
 
 /**
@@ -118,33 +112,61 @@ bool PieceManager::isComplete() {
  */
 void PieceManager::addPeer(const std::string& peerId, std::string bitField)
 {
+    lock.lock();
     peers[peerId] = bitField;
+    lock.unlock();
+    std::stringstream info;
+    info << "Number of connections: " <<
+         std::to_string(peers.size()) << "/" + std::to_string(maximumConnections);
+    // std::cout << info.str() << std::endl;
+    LOG_F(INFO, "%s", info.str().c_str());
 }
 
 /**
  * Updates the information about which pieces a peer has (i.e. reflects
  * a Have message).
  */
-void PieceManager::updatePeer(std::string peerId, int index)
+void PieceManager::updatePeer(const std::string& peerId, int index)
 {
+    lock.lock();
     if (peers.find(peerId) != peers.end())
+    {
         setPiece(peers[peerId], index);
+        lock.unlock();
+    }
     else
+    {
+        lock.unlock();
         throw std::runtime_error("Connection has not been established with peer " + peerId);
+    }
 }
 
 /**
- * Removes a previous added peer in case of a connection lost.
+ * Removes a previous added peer in case of a lost connection.
  * @param peerId: Id of the peer to be removed.
  */
-void PieceManager::removePeer(std::string peerId)
+void PieceManager::removePeer(const std::string& peerId)
 {
+    if (isComplete())
+        return;
+    lock.lock();
     auto iter = peers.find(peerId);
     if (iter != peers.end())
+    {
         peers.erase(iter);
+        lock.unlock();
+        std::stringstream info;
+        info << "Number of connections: " <<
+             std::to_string(peers.size()) << "/" + std::to_string(maximumConnections);
+        // std::cout << info.str() << std::endl;
+        LOG_F(INFO, "%s", info.str().c_str());
+    }
     else
+    {
+        lock.unlock();
         throw std::runtime_error("Attempting to remove a peer " + peerId +
                                  " with whom a connection has not been established.");
+    }
 }
 
 
@@ -296,9 +318,11 @@ Piece* PieceManager::getRarestPiece(std::string peerId)
  */
 void PieceManager::blockReceived(std::string peerId, int pieceIndex, int blockOffset, std::string data)
 {
+
     LOG_F(INFO, "Received block %d for piece %d from peer %s", blockOffset, pieceIndex, peerId.c_str());
     // Removes the received block from pending requests
     PendingRequest* requestToRemove = nullptr;
+    lock.lock();
     for (PendingRequest* pending : pendingRequests)
     {
         if (pending->block->piece == pieceIndex && pending->block->offset == blockOffset)
@@ -323,6 +347,7 @@ void PieceManager::blockReceived(std::string peerId, int pieceIndex, int blockOf
             break;
         }
     }
+    lock.unlock();
     if (!targetPiece)
         throw std::runtime_error("Received Block does not belong to any ongoing Piece.");
 
@@ -339,9 +364,12 @@ void PieceManager::blockReceived(std::string peerId, int pieceIndex, int blockOf
                     std::remove(ongoingPieces.begin(), ongoingPieces.end(), targetPiece),
                     ongoingPieces.end()
             );
-
             havePieces.push_back(targetPiece);
+
+            if (havePieces.size() == 1)
+                startingTime = std::time(nullptr);
             std::stringstream info;
+            info << getStatistics() << " ";
             info << "(" << std::fixed << std::setprecision(2) << (((float) havePieces.size()) / (float) totalPieces * 100) << "%) ";
             info << std::to_string(havePieces.size()) + " / " + std::to_string(totalPieces) + " Pieces downloaded...";
             std::cout << info.str() << std::endl;
@@ -352,6 +380,7 @@ void PieceManager::blockReceived(std::string peerId, int pieceIndex, int blockOf
             targetPiece->reset();
         }
     }
+    // lock.unlock();
 }
 
 /**
@@ -359,9 +388,40 @@ void PieceManager::blockReceived(std::string peerId, int pieceIndex, int blockOf
  */
 void PieceManager::write(Piece* piece)
 {
-    lock.lock();
     long position = piece->index * fileParser.getPieceLength();
     downloadedFile.seekp(position);
     downloadedFile << piece->getData();
+}
+
+/**
+ * Calculates the approximate download speed and estimates the
+ * remaining downloading time.
+ * FIXME: Calculates the current download speed based on the
+ * last five pieces downloaded as opposed to simply taking
+ * the average download speed across all downloaded pieces.
+ */
+std::string PieceManager::getStatistics()
+{
+    lock.lock();
+    std::stringstream info;
+
+    long pieceLength = fileParser.getPieceLength();
+    unsigned long downloadedPieces = havePieces.size();
+    unsigned long downloadedLength = downloadedPieces * pieceLength;
+
+    time_t currentTime = std::time(nullptr);
+    auto timeSinceStart = std::difftime(currentTime, startingTime);
+
+    double avgDownloadSpeed = (double) downloadedLength / (double) timeSinceStart;
+    double avgDownloadSpeedInMB = avgDownloadSpeed / pow(10, 6);
+
+    info << "[" << std::fixed << std::setprecision(2) << avgDownloadSpeedInMB << " MB/s, ";
+
+    double timePerPiece = (double) timeSinceStart / (double) downloadedPieces;
+    long remainingTime = ceil(timePerPiece * (totalPieces - downloadedPieces));
+
+    info << "ETA: " << formatTime(remainingTime) << "]";
     lock.unlock();
+
+    return info.str();
 }

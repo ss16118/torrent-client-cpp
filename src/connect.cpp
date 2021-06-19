@@ -12,12 +12,13 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/poll.h>
+#include <limits>
 #include <loguru/loguru.hpp>
 #include "connect.h"
 #include "utils.h"
 
-#define CONNECT_TIMEOUT 5
-#define READ_TIMEOUT 3
+#define CONNECT_TIMEOUT 3
+#define READ_TIMEOUT 3000 // 3 seconds
 
 /**
  * Sets the given socket to either blocking or non-blocking mode.
@@ -126,7 +127,7 @@ void sendData(const int sock, const std::string& data)
  * @param bufferSize: size of the receiving buffer.
  * @return received data in the form a string.
  */
-std::string receiveData(const int sock, int bufferSize)
+std::string receiveData(const int sock, uint32_t bufferSize)
 {
 
     std::string reply;
@@ -136,54 +137,65 @@ std::string receiveData(const int sock, int bufferSize)
 //    tv.tv_sec = READ_TIMEOUT;
 //    tv.tv_usec = 0;
 //    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
-    struct pollfd fd;
-    int ret;
-    fd.fd = sock;
-    fd.events = POLLIN;
-    ret = poll(&fd, 1, READ_TIMEOUT * 1000);
-
     // If buffer size is not specified, read the first 4 bytes of the message
     // to obtain the total length of the response.
     if (!bufferSize)
     {
+        struct pollfd fd;
+        int ret;
+        fd.fd = sock;
+        fd.events = POLLIN;
+        ret = poll(&fd, 1, READ_TIMEOUT);
+
+        long bytesRead;
         const int lengthIndicatorSize = 4;
         char buffer[lengthIndicatorSize];
         switch(ret)
         {
             case -1:
-                return reply;
+                throw std::runtime_error("Read failed from socket " + std::to_string(sock));
             case 0:
                 throw std::runtime_error("Read timeout from socket " + std::to_string(sock));
             default:
-                read(sock, buffer, sizeof(buffer));
+                bytesRead = recv(sock, buffer, sizeof(buffer), 0);
         }
-//        if (read(sock, buffer, sizeof(buffer)) < 0)
-//            return reply;
+        if (bytesRead != lengthIndicatorSize)
+            return reply;
+
         std::string messageLengthStr;
         for (char i : buffer)
             messageLengthStr += i;
         uint32_t messageLength = bytesToInt(messageLengthStr);
-        // std::cout << "[DEBUG] Message length: " << std::to_string(messageLength) << std::endl;
-        bufferSize = (int) messageLength;
+        bufferSize = messageLength;
     }
 
+    // If the buffer size is greater than uint16_t max, a segfault will
+    // occur when initializing the buffer
+    if (bufferSize > std::numeric_limits<uint16_t>::max())
+        throw std::runtime_error("Received corrupted data [Received buffer size greater than 2 ^ 16 - 1]");
+
     char buffer[bufferSize];
-    memset(buffer, NULL, sizeof(buffer));
+    // memset(buffer, 0, bufferSize);
     // Receives reply from the host
     // Keeps reading from the buffer until all expected bytes are received
-    int bytesRead = 0;
-    int bytesToRead = bufferSize - bytesRead;
+    long bytesRead = 0;
+    long bytesToRead = bufferSize;
+    // If not all expected bytes are received within the period of time
+    // specified by READ_TIMEOUT, the read process will stop.
     auto startTime = std::chrono::steady_clock::now();
     do
     {
         auto diff = std::chrono::steady_clock::now() - startTime;
-        if (std::chrono::duration<double, std::milli> (diff).count() > READ_TIMEOUT * 1000)
+        if (std::chrono::duration<double, std::milli> (diff).count() > READ_TIMEOUT)
+        {
+            // LOG_F(INFO, "Read timeout from socket %d", sock);
             throw std::runtime_error("Read timeout from socket " + std::to_string(sock));
-        bytesRead = recv(sock, buffer, sizeof(buffer), 0);
+        }
+        bytesRead = recv(sock, buffer, bufferSize, 0);
         // bytesRead = read(sock, buffer, sizeof(buffer));
-        bytesToRead -= bytesRead;
-        if (bytesRead < 0)
+        if (bytesRead <= 0)
             throw std::runtime_error("Failed to receive data from socket " + std::to_string(sock));
+        bytesToRead -= bytesRead;
         for (int i = 0; i < bytesRead; i++)
             reply.push_back(buffer[i]);
     }

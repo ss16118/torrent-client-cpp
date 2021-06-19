@@ -6,6 +6,7 @@
 #define BITTORRENTCLIENT_SHAREDQUEUE_H
 
 #include <queue>
+#include <ostream>
 #include <mutex>
 #include <condition_variable>
 
@@ -29,7 +30,6 @@ public:
 
     int size();
     bool empty();
-    void notifyAll();
 
 private:
     std::deque<T> queue_;
@@ -110,16 +110,6 @@ void SharedQueue<T>::clear()
     std::deque<T>().swap(queue_);
     mlock.unlock();
     cond_.notify_one();
-}
-
-/**
- * Unblocks all the waiting threads. Only intends to
- * be called when the download completes.
- */
-template<typename T>
-void SharedQueue<T>::notifyAll()
-{
-    cond_.notify_all();
 }
 
 #endif //BITTORRENTCLIENT_SHAREDQUEUE_H
