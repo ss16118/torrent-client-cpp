@@ -97,13 +97,6 @@ void setPiece(std::string& bitField, int index)
     bitField[byteIndex] |= (1 << (7 - offset));
 }
 
-std::string toBinary(int n)
-{
-    std::string r;
-    while(n!=0) {r=(n%2==0 ?"0":"1")+r; n/=2;}
-    return r;
-}
-
 /**
  * Converts a series of bytes in a string format to an integer.
  */
@@ -124,7 +117,11 @@ int bytesToInt(std::string bytes)
  * Implementation from:
  * https://stackoverflow.com/questions/58695875/how-to-convert-seconds-to-hhmmss-millisecond-format-c
  */
-std::string formatTime(long seconds) {
+std::string formatTime(long seconds)
+{
+    if (seconds < 0)
+        return "inf";
+
     std::string result;
     // compute h, m, s
     std::string h = std::to_string(seconds / 3600);

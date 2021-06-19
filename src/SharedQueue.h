@@ -22,7 +22,7 @@ public:
     ~SharedQueue();
 
     T& front();
-    void pop_front();
+    T& pop_front();
 
     void push_back(const T& item);
     void push_back(T&& item);
@@ -55,14 +55,16 @@ T& SharedQueue<T>::front()
 }
 
 template <typename T>
-void SharedQueue<T>::pop_front()
+T& SharedQueue<T>::pop_front()
 {
     std::unique_lock<std::mutex> mlock(mutex_);
     while (queue_.empty())
     {
         cond_.wait(mlock);
     }
+    T& front = queue_.front();
     queue_.pop_front();
+    return front;
 }
 
 template <typename T>

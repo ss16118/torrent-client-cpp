@@ -13,14 +13,13 @@
 class TorrentClient
 {
 private:
-    bool terminated = false;
     const int threadNum;
     std::string peerId;
     SharedQueue<Peer*> queue;
     std::vector<std::thread> threadPool;
     std::vector<PeerConnection*> connections;
 public:
-    explicit TorrentClient(int threadNum = 5, bool enableLogging = true);
+    explicit TorrentClient(int threadNum = 5, bool enableLogging = true, std::string logFilePath = "logs/client.log");
     ~TorrentClient();
     void terminate();
     void downloadFile(const std::string& torrentFilePath, const std::string& downloadDirectory);

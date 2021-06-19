@@ -35,12 +35,12 @@ private:
     void requestPiece();
     void closeSock();
     bool establishNewConnection();
-    BitTorrentMessage receiveMessage(int bufferSize = NULL) const;
+    BitTorrentMessage receiveMessage(int bufferSize = 0) const;
 
 public:
     const std::string &getPeerId() const;
 
-    explicit PeerConnection(SharedQueue<Peer*>* queue, const std::string& clientId, const std::string& infoHash, PieceManager* pieceManager);
+    explicit PeerConnection(SharedQueue<Peer*>* queue, std::string  clientId, std::string  infoHash, PieceManager* pieceManager);
     ~PeerConnection();
     void start();
     void stop();

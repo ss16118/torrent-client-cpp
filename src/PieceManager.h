@@ -10,6 +10,7 @@
 #include <ctime>
 #include <mutex>
 #include <fstream>
+#include <thread>
 
 #include "Piece.h"
 #include "TorrentFileParser.h"
@@ -37,8 +38,11 @@ private:
     std::vector<Piece*> havePieces;
     std::vector<PendingRequest*> pendingRequests;
     std::ofstream downloadedFile;
+    // std::thread& progressTrackerThread;
+    const long pieceLength;
     const TorrentFileParser& fileParser;
     const int maximumConnections;
+    int piecesDownloadedInInterval = 0;
     time_t startingTime;
     int totalPieces{};
 
@@ -50,7 +54,8 @@ private:
     Block* nextOngoing(std::string peerId);
     Piece* getRarestPiece(std::string peerId);
     void write(Piece* piece);
-    std::string getStatistics();
+    void displayProgressBar();
+    void trackProgress();
 public:
     explicit PieceManager(const TorrentFileParser& fileParser, const std::string& downloadPath, int maximumConnections);
     ~PieceManager();
@@ -59,6 +64,7 @@ public:
     void addPeer(const std::string& peerId, std::string bitField);
     void removePeer(const std::string& peerId);
     void updatePeer(const std::string& peerId, int index);
+    unsigned long bytesDownloaded();
     Block* nextRequest(std::string peerId);
 };
 

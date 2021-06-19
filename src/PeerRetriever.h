@@ -28,11 +28,11 @@ private:
     std::string infoHash;
     std::string peerId;
     int port;
-    long fileSize;
+    const unsigned long fileSize;
     std::vector<Peer*> decodeResponse(std::string response);
 public:
-    explicit PeerRetriever(std::string peerId, std::string announceUrL, std::string infoHash, int port, long fileSize);
-    std::vector<Peer*> retrievePeers();
+    explicit PeerRetriever(std::string peerId, std::string announceUrL, std::string infoHash, int port, unsigned long fileSize);
+    std::vector<Peer*> retrievePeers(unsigned long bytesDownloaded = 0);
 };
 
 #endif //BITTORRENTCLIENT_PEERRETRIEVER_H

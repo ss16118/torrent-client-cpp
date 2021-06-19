@@ -17,7 +17,7 @@
 #define PORT 8080
 #define PEER_QUERY_INTERVAL 60 // 1 minute
 
-TorrentClient::TorrentClient(const int threadNum, bool enableLogging): threadNum(threadNum)
+TorrentClient::TorrentClient(const int threadNum, bool enableLogging, std::string logFilePath): threadNum(threadNum)
 {
     // Generate a random 20-byte peer Id for the client as per the convention described
     // on the following web page.
@@ -34,8 +34,8 @@ TorrentClient::TorrentClient(const int threadNum, bool enableLogging): threadNum
     if (enableLogging)
     {
         loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
-        loguru::g_flush_interval_ms = 1000;
-        loguru::add_file("../logs/client.log", loguru::Truncate, loguru::Verbosity_MAX);
+        loguru::g_flush_interval_ms = 100;
+        loguru::add_file(logFilePath.c_str(), loguru::Truncate, loguru::Verbosity_MAX);
     }
     else
     {
@@ -79,42 +79,35 @@ void TorrentClient::downloadFile(const std::string& torrentFilePath, const std::
     auto lastPeerQuery = (time_t) (-1);
 
     std::cout << "Download initiated..." << std::endl;
+
     while (true)
     {
         if (pieceManager.isComplete())
-            break;
-
-        if (terminated)
             break;
 
         time_t currentTime = std::time(nullptr);
         auto diff = std::difftime(currentTime, lastPeerQuery);
         // Retrieve peers from the tracker after a certain time interval or whenever
         // the queue is empty
-        // FIXME: It is an inadequate solution to the problem caused
-        // by threads not terminating at the end due to the fact
-        // that they are blocked by an empty queue.
         if (lastPeerQuery == -1 || diff >= PEER_QUERY_INTERVAL || queue.empty())
         {
-            LOG_F(INFO, "Retrieving peers from tracker: %s...", announceUrl.c_str());
             PeerRetriever peerRetriever(peerId, announceUrl, infoHash, PORT, fileSize);
-            std::vector<Peer*> peers = peerRetriever.retrievePeers();
-
+            std::vector<Peer*> peers = peerRetriever.retrievePeers(pieceManager.bytesDownloaded());
+            lastPeerQuery = currentTime;
             if (!peers.empty())
             {
-                lastPeerQuery = currentTime;
                 queue.clear();
                 for (auto peer : peers)
                     queue.push_back(peer);
 
             }
         }
-
     }
+
+    terminate();
 
     if (pieceManager.isComplete())
     {
-        terminate();
         std::cout << "Download completed!" << std::endl;
         std::cout << "File downloaded to " << downloadPath << std::endl;
     }
@@ -125,8 +118,13 @@ void TorrentClient::downloadFile(const std::string& torrentFilePath, const std::
  */
 void TorrentClient::terminate()
 {
-    terminated = true;
-
+    // Pushes dummy Peers into the queue so that
+    // the waiting threads can terminate
+    for (int i = 0; i < threadNum; i++)
+    {
+        Peer* dummyPeer = new Peer { "0.0.0.0", 0 };
+        queue.push_back(dummyPeer);
+    }
     for (auto connection : connections)
         connection->stop();
 

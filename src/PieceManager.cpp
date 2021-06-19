@@ -9,25 +9,33 @@
 #include <loguru/loguru.hpp>
 #include <bencode/bencoding.h>
 #include <iomanip>
+#include <unistd.h>
 
 #include "PieceManager.h"
 #include "Block.h"
 #include "utils.h"
 
-#define BLOCK_SIZE 16384         // 2 ^ 14
-#define MAX_PENDING_TIME 120     // 2 minutes
+#define BLOCK_SIZE 16384              // 2 ^ 14
+#define MAX_PENDING_TIME 120          // 2 minutes
+#define PROGRESS_BAR_WIDTH 40
+#define PROGRESS_DISPLAY_INTERVAL 0.5 // 0.5 sec
 
 PieceManager::PieceManager(
     const TorrentFileParser& fileParser,
     const std::string& downloadPath,
     const int maximumConnections
-): fileParser(fileParser), maximumConnections(maximumConnections)
+): fileParser(fileParser), maximumConnections(maximumConnections), pieceLength(fileParser.getPieceLength())
 {
     missingPieces = initiatePieces();
     // Creates the destination file with the file size specified in the Torrent file
     downloadedFile.open(downloadPath, std::ios::binary | std::ios::out);
     downloadedFile.seekp(fileParser.getFileSize() - 1);
     downloadedFile.write("", 1);
+
+    // Starts a thread to track progress of the download
+    startingTime = std::time(nullptr);
+    std::thread progressThread([this] { this->trackProgress(); });
+    progressThread.detach();
 }
 
 /**
@@ -60,7 +68,6 @@ std::vector<Piece*> PieceManager::initiatePieces()
     missingPieces.reserve(totalPieces);
 
     long totalLength = fileParser.getFileSize();
-    long pieceLength = fileParser.getPieceLength();
 
     // number of blocks in a normal piece (i.e. pieces that are not the last one)
     int blockCount = ceil(pieceLength / BLOCK_SIZE);
@@ -158,7 +165,6 @@ void PieceManager::removePeer(const std::string& peerId)
         std::stringstream info;
         info << "Number of connections: " <<
              std::to_string(peers.size()) << "/" + std::to_string(maximumConnections);
-        // std::cout << info.str() << std::endl;
         LOG_F(INFO, "%s", info.str().c_str());
     }
     else
@@ -360,19 +366,18 @@ void PieceManager::blockReceived(std::string peerId, int pieceIndex, int blockOf
         {
             write(targetPiece);
             // Removes the Piece from the ongoing list
+            lock.lock();
             ongoingPieces.erase(
                     std::remove(ongoingPieces.begin(), ongoingPieces.end(), targetPiece),
                     ongoingPieces.end()
             );
             havePieces.push_back(targetPiece);
+            piecesDownloadedInInterval++;
+            lock.unlock();
 
-            if (havePieces.size() == 1)
-                startingTime = std::time(nullptr);
             std::stringstream info;
-            info << getStatistics() << " ";
             info << "(" << std::fixed << std::setprecision(2) << (((float) havePieces.size()) / (float) totalPieces * 100) << "%) ";
             info << std::to_string(havePieces.size()) + " / " + std::to_string(totalPieces) + " Pieces downloaded...";
-            std::cout << info.str() << std::endl;
             LOG_F(INFO, "%s", info.str().c_str());
         }
         else
@@ -394,34 +399,76 @@ void PieceManager::write(Piece* piece)
 }
 
 /**
- * Calculates the approximate download speed and estimates the
- * remaining downloading time.
- * FIXME: Calculates the current download speed based on the
- * last five pieces downloaded as opposed to simply taking
- * the average download speed across all downloaded pieces.
+ * Calculates the number of bytes downloaded.
  */
-std::string PieceManager::getStatistics()
+unsigned long PieceManager::bytesDownloaded()
 {
     lock.lock();
-    std::stringstream info;
+    unsigned long bytesDownloaded = havePieces.size() * pieceLength;
+    lock.unlock();
+    return bytesDownloaded;
+}
 
-    long pieceLength = fileParser.getPieceLength();
+/**
+ * A function used by the progressThread to collect and calculate
+ * statistics collected during the download and display them
+ * in the form of a progress bar.
+ */
+void PieceManager::trackProgress()
+{
+    usleep(pow(10, 6));
+    while (!isComplete())
+    {
+        displayProgressBar();
+        // Resets the number of pieces downloaded to 0
+        piecesDownloadedInInterval = 0;
+        usleep(PROGRESS_DISPLAY_INTERVAL * pow(10, 6));
+    }
+}
+
+/**
+ * Creates and outputs a progress bar in stdout displaying
+ * download statistics and progress.
+ */
+void PieceManager::displayProgressBar()
+{
+    std::stringstream info;
+    lock.lock();
     unsigned long downloadedPieces = havePieces.size();
-    unsigned long downloadedLength = downloadedPieces * pieceLength;
+    unsigned long downloadedLength = pieceLength * piecesDownloadedInInterval;
+
+    // Calculates the average download speed in the last PROGRESS_DISPLAY_INTERVAL in MB/s
+    double avgDownloadSpeed = (double) downloadedLength / (double) PROGRESS_DISPLAY_INTERVAL;
+    double avgDownloadSpeedInMBS = avgDownloadSpeed / pow(10, 6);
+
+    info << "[Peers: " + std::to_string(peers.size()) + "/" + std::to_string(maximumConnections) + ", ";
+    info << std::fixed << std::setprecision(2) << avgDownloadSpeedInMBS << " MB/s, ";
+
+    // Estimates the remaining downloading time
+    double timePerPiece = (double) PROGRESS_DISPLAY_INTERVAL / (double) piecesDownloadedInInterval;
+    long remainingTime = ceil(timePerPiece * (totalPieces - downloadedPieces));
+    info << "ETA: " << formatTime(remainingTime) << "]";
+
+    double progress = (double) downloadedPieces / (double) totalPieces;
+    int pos = PROGRESS_BAR_WIDTH * progress;
+    info << "[";
+    for (int i = 0; i < PROGRESS_BAR_WIDTH; i++)
+    {
+        if (i < pos) info << "=";
+        else if (i == pos) info << ">";
+        else info << " ";
+    }
+    info << "] ";
+    info << std::to_string(downloadedPieces) + "/" + std::to_string(totalPieces) + " ";
+    info << "[" << std::fixed << std::setprecision(2) << (progress * 100) << "%] ";
 
     time_t currentTime = std::time(nullptr);
-    auto timeSinceStart = std::difftime(currentTime, startingTime);
+    long timeSinceStart = floor(std::difftime(currentTime, startingTime));
 
-    double avgDownloadSpeed = (double) downloadedLength / (double) timeSinceStart;
-    double avgDownloadSpeedInMB = avgDownloadSpeed / pow(10, 6);
-
-    info << "[" << std::fixed << std::setprecision(2) << avgDownloadSpeedInMB << " MB/s, ";
-
-    double timePerPiece = (double) timeSinceStart / (double) downloadedPieces;
-    long remainingTime = ceil(timePerPiece * (totalPieces - downloadedPieces));
-
-    info << "ETA: " << formatTime(remainingTime) << "]";
+    info << "in " << formatTime(timeSinceStart);
+    std::cout << info.str() << "\r";
+    std::cout.flush();
     lock.unlock();
-
-    return info.str();
+    if (isComplete())
+        std::cout << std::endl;
 }
