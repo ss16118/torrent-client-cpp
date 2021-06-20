@@ -56,6 +56,7 @@ The current implementation of this BitTorrent client only supports the following
 
 To make it an actual usable BitTorrent client, it will have to include:
 - Seeding
+- Resuming a download.
 - Downloading multi-file Torrents
 - Probably a more intuitive user interface.
 - Pipelining when requesting blocks from peers.
