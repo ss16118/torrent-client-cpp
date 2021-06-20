@@ -10,6 +10,7 @@
 #include <sstream>
 #include <cassert>
 #include <crypto/sha1.h>
+#include <loguru/loguru.hpp>
 
 #include "Piece.h"
 #include "utils.h"

@@ -19,7 +19,7 @@
 struct PendingRequest
 {
     Block* block;
-    std::tm* timestamp;
+    time_t timestamp;
 };
 
 /**

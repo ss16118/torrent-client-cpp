@@ -16,9 +16,9 @@
 #include "utils.h"
 
 #define BLOCK_SIZE 16384              // 2 ^ 14
-#define MAX_PENDING_TIME 120          // 2 minutes
+#define MAX_PENDING_TIME 5          // 5 sec
 #define PROGRESS_BAR_WIDTH 40
-#define PROGRESS_DISPLAY_INTERVAL 0.5 // 0.5 sec
+#define PROGRESS_DISPLAY_INTERVAL 1 // 0.5 sec
 
 PieceManager::PieceManager(
     const TorrentFileParser& fileParser,
@@ -235,14 +235,12 @@ Block* PieceManager::expiredRequest(std::string peerId)
         if (hasPiece(peers[peerId], pending->block->piece))
         {
             // If the request has expired
-            auto temp = pending->timestamp;
-            temp->tm_sec += MAX_PENDING_TIME;
-            time_t boundary = std::mktime(temp);
-            auto diff = std::difftime(boundary, currentTime);
-            if (diff <= 0)
+            auto diff = std::difftime(currentTime, pending->timestamp);
+            if (diff >= MAX_PENDING_TIME)
             {
                 // Resets the timer for that request
-                pending->timestamp = temp;
+                pending->timestamp = currentTime;
+                LOG_F(INFO, "Block %d from piece %d has expired", pending->block->offset, pending->block->piece);
                 return pending->block;
             }
         }
@@ -267,7 +265,7 @@ Block* PieceManager::nextOngoing(std::string peerId)
                 auto currentTime = std::time(nullptr);
                 auto newPendingRequest = new PendingRequest;
                 newPendingRequest->block = block;
-                newPendingRequest->timestamp = std::localtime(&currentTime);
+                newPendingRequest->timestamp = std::time(nullptr);
                 pendingRequests.push_back(newPendingRequest);
                 return block;
             }
@@ -383,6 +381,7 @@ void PieceManager::blockReceived(std::string peerId, int pieceIndex, int blockOf
         else
         {
             targetPiece->reset();
+            LOG_F(INFO, "Hash mismatch for Piece %d", targetPiece->index);
         }
     }
     // lock.unlock();
