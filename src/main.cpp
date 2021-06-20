@@ -6,14 +6,14 @@
 
 int main(int argc, const char* argv[]) {
 
-    cxxopts::Options options("torrent-client-cpp", "A simple, multi-threaded BitTorrent client written in C++");
+    cxxopts::Options options("BitTorrentClient", "A simple, multi-threaded BitTorrent client written in C++");
 
     options.set_width(80).set_tab_expansion().add_options()
             ("t,torrent-file", "Path to the Torrent file", cxxopts::value<std::string>())
             ("o,output-dir", "The output directory to which the file will be downloaded", cxxopts::value<std::string>())
             ("n,thread-num", "Number of downloading threads to use", cxxopts::value<int>()->default_value("5"))
             ("l,logging", "Enable logging", cxxopts::value<bool>()->default_value("false"))
-            ("f,log-file", "Path to the log file", cxxopts::value<std::string>()->default_value("logs/client.log"))
+            ("f,log-file", "Path to the log file", cxxopts::value<std::string>()->default_value("../logs/client.log"))
             ("h,help", "Print arguments and their descriptions")
             ;
     try {
