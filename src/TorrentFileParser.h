@@ -29,7 +29,7 @@ public:
     std::string getFileName() const;
     std::string getAnnounce() const;
     std::shared_ptr<bencoding::BItem> get(std::string key) const;
-    std::string getInfoHash();
+    std::string getInfoHash() const;
     std::vector<std::string> splitPieceHashes() const;
 };
 

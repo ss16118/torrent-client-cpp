@@ -18,8 +18,8 @@
 /**
  * Constructor of the class TorrentFileParser. Takes in
  * a string that represents the path of the torrent file.
- * parses its content into a string. Stores the string
- * in the instance attribute fileString.
+ * parses its content and stores the root of the dictionary
+ * to a instance variable named 'root'.
  * @param filePath: path of the torrent file.
  */
 TorrentFileParser::TorrentFileParser(const std::string& filePath)
@@ -37,7 +37,7 @@ TorrentFileParser::TorrentFileParser(const std::string& filePath)
 
 /**
  * Retrieves the BItem which has the given key in the decoded Torrent file.
- * Traverses all the key-value pairs in the parsed dictionary, including
+ * Traverses through all the key-value pairs in the parsed dictionary, including
  * sub-dictionaries (i.e. dictionaries which are values).
  */
 std::shared_ptr<bencoding::BItem> TorrentFileParser::get(std::string key) const {
@@ -52,7 +52,7 @@ std::shared_ptr<bencoding::BItem> TorrentFileParser::get(std::string key) const 
  * https://stackoverflow.com/questions/28348678/what-exactly-is-the-info-hash-in-a-torrent-file.
  * The sha1 function comes from http://www.zedwood.com/article/cpp-sha1-function.
  */
-std::string TorrentFileParser::getInfoHash()
+std::string TorrentFileParser::getInfoHash() const
 {
     std::shared_ptr<bencoding::BItem> infoDictionary = get("info");
     std::string infoString = bencoding::encode(infoDictionary);

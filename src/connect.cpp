@@ -65,9 +65,6 @@ int createConnection(const std::string& ip, const int port)
     if (inet_pton(AF_INET, tempIp, &address.sin_addr) <= 0)
         throw std::runtime_error("Invalid IP address: " + ip);
 
-//    if (connect(sock, (struct sockaddr *) &address, sizeof(address)) < 0)
-//        throw std::runtime_error("Failed to connect to " + ip);
-
     // Sets socket to non-block mode
     if (!setSocketBlocking(sock, false))
         throw std::runtime_error("An error occurred when setting socket " + std::to_string(sock) + "to NONBLOCK");
@@ -132,11 +129,6 @@ std::string receiveData(const int sock, uint32_t bufferSize)
 
     std::string reply;
 
-    // Sets timeout on the socket for read operation
-//    struct timeval tv;
-//    tv.tv_sec = READ_TIMEOUT;
-//    tv.tv_usec = 0;
-//    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
     // If buffer size is not specified, read the first 4 bytes of the message
     // to obtain the total length of the response.
     if (!bufferSize)
@@ -188,11 +180,10 @@ std::string receiveData(const int sock, uint32_t bufferSize)
         auto diff = std::chrono::steady_clock::now() - startTime;
         if (std::chrono::duration<double, std::milli> (diff).count() > READ_TIMEOUT)
         {
-            // LOG_F(INFO, "Read timeout from socket %d", sock);
             throw std::runtime_error("Read timeout from socket " + std::to_string(sock));
         }
         bytesRead = recv(sock, buffer, bufferSize, 0);
-        // bytesRead = read(sock, buffer, sizeof(buffer));
+
         if (bytesRead <= 0)
             throw std::runtime_error("Failed to receive data from socket " + std::to_string(sock));
         bytesToRead -= bytesRead;

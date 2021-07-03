@@ -248,7 +248,7 @@ void PeerConnection::receiveUnchoke() {
 }
 
 /**
- * This function establishes a TCP connection with peer and performs
+ * This function establishes a TCP connection with the peer and performs
  * the following actions:
  *
  * 1. Sends the peer a BitTorrent handshake message, waits for its reply and

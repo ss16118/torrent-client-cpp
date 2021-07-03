@@ -149,7 +149,7 @@ void PieceManager::updatePeer(const std::string& peerId, int index)
 }
 
 /**
- * Removes a previous added peer in case of a lost connection.
+ * Removes a previously added peer in case of a lost connection.
  * @param peerId: Id of the peer to be removed.
  */
 void PieceManager::removePeer(const std::string& peerId)
@@ -177,9 +177,9 @@ void PieceManager::removePeer(const std::string& peerId)
 
 
 /**
- * Get the next block that should be requested from the given peer.
- * If there are no more blocks left to retrieve or if this peer does not
- * have any of the missing pieces None is returned
+ * Retrieves the next block that should be requested from the given peer.
+ * If there are no more blocks left to download or if this peer does not
+ * have any of the missing pieces, None is returned
  * @return pointer to the Block struct to be requested.
  */
 Block* PieceManager::nextRequest(std::string peerId)
@@ -194,8 +194,6 @@ Block* PieceManager::nextRequest(std::string peerId)
     // due to timeout
     // 2. Check the ongoing pieces to get the next block to request
     // 3. Check if this peer have any of the missing pieces not yet started
-
-    // If the peer has not been added yet
 
     lock.lock();
     if (missingPieces.empty())
@@ -223,8 +221,8 @@ Block* PieceManager::nextRequest(std::string peerId)
 }
 
 /**
- * Go through previously requested blocks, if any one have been in the
- * requested state for longer than `MAX_PENDING_TIME` return the block to
+ * Goes through previously requested blocks, if one has been in the
+ * requested state for longer than `MAX_PENDING_TIME` returns the block to
  * be re-requested. If no pending blocks exist, None is returned
  */
 Block* PieceManager::expiredRequest(std::string peerId)
