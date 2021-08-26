@@ -20,7 +20,7 @@ If you want to try this BitTorrent client yourself, follow the steps below:
 $ cd torrent-client-cpp && mkdir build && cd build
 $ cmake .. && make -j
 ```
-- To download the ubunto iso as an example, enter the following command:
+- To download the ubuntu iso as an example, enter the following command:
 ```console
 $ ./BitTorrentClient -t ../res/ubuntu-12.04.5-alternate-amd64.iso.torrent -o ../res/  # logging disabled
 $ ./BitTorrentClient -t ../res/ubuntu-12.04.5-alternate-amd64.iso.torrent -o ../res/  -l # logging enabled, log can be found in logs/client.log

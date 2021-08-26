@@ -18,6 +18,7 @@ add_library(loguru STATIC lib/loguru/loguru.cpp lib/loguru/loguru.hpp)
 # cxxopts
 add_library(cxxopts STATIC lib/cxxopts/cxxopts.hpp)
 set_target_properties(cxxopts PROPERTIES LINKER_LANGUAGE CXX)
+
 # cpr
 include(FetchContent)
 FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/whoshuu/cpr.git GIT_TAG c8d33915dbd88ad6c92b258869b03aba06587ff9) # the commit hash for 1.5.0

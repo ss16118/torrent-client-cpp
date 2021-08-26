@@ -4,8 +4,8 @@
 #include <cxxopts/cxxopts.hpp>
 #include "TorrentClient.h"
 
-int main(int argc, const char* argv[]) {
-
+int main(int argc, const char* argv[])
+{
     cxxopts::Options options("BitTorrentClient", "A simple, multi-threaded BitTorrent client written in C++");
 
     options.set_width(80).set_tab_expansion().add_options()
@@ -16,9 +16,11 @@ int main(int argc, const char* argv[]) {
             ("f,log-file", "Path to the log file", cxxopts::value<std::string>()->default_value("../logs/client.log"))
             ("h,help", "Print arguments and their descriptions")
             ;
-    try {
+    try
+    {
         auto parsedOptions = options.parse(argc, argv);
-        if (parsedOptions.count("help")) {
+        if (parsedOptions.count("help"))
+        {
             std::cout << options.help() << std::endl;
             return 0;
         }
